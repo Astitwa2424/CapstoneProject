@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  password      String?
+  role          UserRole  @default(CUSTOMER)
+  phone         String?
+  address       String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts          Account[]
+  sessions          Session[]
+  customerProfile   CustomerProfile?
+  driverProfile     DriverProfile?
+  restaurantProfile RestaurantProfile?
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  RESTAURANT
+  ADMIN
+}
+
+model CustomerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique @map("user_id")
+  deliveryAddress String?  @map("delivery_address")
+  paymentMethods  Json?    @map("payment_methods")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("customer_profiles")
+}
+
+model DriverProfile {
+  id              String      @id @default(cuid())
+  userId          String      @unique @map("user_id")
+  licenseNumber   String?     @unique @map("license_number")
+  vehicleType     VehicleType? @map("vehicle_type")
+  vehicleModel    String?     @map("vehicle_model")
+  plateNumber     String?     @map("plate_number")
+  isAvailable     Boolean     @default(false) @map("is_available")
+  rating          Float       @default(0.0)
+  totalDeliveries Int         @default(0) @map("total_deliveries")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("driver_profiles")
+}
+
+enum VehicleType {
+  BIKE
+  CAR
+  SCOOTER
+  MOTORCYCLE
+}
+
+model RestaurantProfile {
+  id                         String   @id @default(cuid())
+  userId                     String   @unique @map("user_id")
+  name                       String
+  description                String?
+  address                    String?
+  phone                      String?
+  cuisine                    Json?
+  isOpen                     Boolean  @default(false) @map("is_open")
+  rating                     Float    @default(0.0)
+  deliveryFee                Float    @default(0.0) @map("delivery_fee")
+  minOrder                   Float    @default(0.0) @map("min_order")
+  businessRegistrationNumber String?  @map("business_registration_number")
+  taxId                      String?  @map("tax_id")
+  category                   String?
+  website                    String?
+  facebookUrl                String?  @map("facebook_url")
+  instagramUrl               String?  @map("instagram_url")
+  twitterUrl                 String?  @map("twitter_url")
+  streetAddress              String?  @map("street_address")
+  city                       String?
+  state                      String?
+  postalCode                 String?  @map("postal_code")
+  country                    String?
+  operatingHours             Json?    @map("operating_hours")
+  bankAccountNumber          String?  @map("bank_account_number")
+  bankName                   String?  @map("bank_name")
+  swiftCode                  String?  @map("swift_code")
+  mapLatitude                Float?   @map("map_latitude")
+  mapLongitude               Float?   @map("map_longitude")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuItems MenuItem[]
+
+  @@map("restaurant_profiles")
+}
+
+model MenuItem {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  image        String?
+  price        Float
+  category     String?
+  allergens    Json?
+  spicyLevel   Int      @default(0) @map("spicy_level")
+  isVegetarian Boolean  @default(false) @map("is_vegetarian")
+  isVegan      Boolean  @default(false) @map("is_vegan")
+  isGlutenFree Boolean  @default(false) @map("is_gluten_free")
+  isActive     Boolean  @default(true) @map("is_active")
+  restaurantId String   @map("restaurant_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant    RestaurantProfile @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  modifications Modification[]
+
+  @@map("menu_items")
+}
+
+model Modification {
+  id         String   @id @default(cuid())
+  label      String
+  cost       Float
+  menuItemId String   @map("menu_item_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@map("modifications")
+}
