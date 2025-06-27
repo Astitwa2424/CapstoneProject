@@ -11,21 +11,19 @@ export default function HomePage() {
       <nav className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-red-600 rounded-lg flex items-center justify-center">
               <ChefHat className="w-5 h-5 text-white" />
             </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
-              Food Hub
-            </span>
+            <span className="text-2xl font-bold text-red-500">FoodHub</span>
           </div>
           <div className="flex items-center space-x-6">
-            <Link href="/driver" className="text-gray-600 hover:text-orange-500 transition-colors">
-              Food Hub Driver
+            <Link href="/driver" className="text-gray-600 hover:text-red-500 transition-colors">
+              FoodHub Driver
             </Link>
-            <Link href="/restaurant" className="text-gray-600 hover:text-orange-500 transition-colors">
-              Food Hub Restaurant
+            <Link href="/restaurant" className="text-gray-600 hover:text-red-500 transition-colors">
+              FoodHub Restaurant
             </Link>
-            <Link href="/customer-service" className="text-gray-600 hover:text-orange-500 transition-colors">
+            <Link href="/customer-service" className="text-gray-600 hover:text-red-500 transition-colors">
               Support
             </Link>
             <Button asChild variant="outline">
@@ -38,12 +36,10 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20">
         <div className="text-center max-w-4xl mx-auto">
-          <Badge className="mb-6 bg-orange-100 text-orange-700 hover:bg-orange-100">
-            🎉 Free delivery on your first order!
-          </Badge>
+          <Badge className="mb-6 bg-red-100 text-red-700 hover:bg-red-100">🎉 Free delivery on your first order!</Badge>
           <h1 className="text-6xl font-bold text-gray-900 mb-6 leading-tight">
             Delicious food
-            <span className="bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-red-500 to-red-600 bg-clip-text text-transparent">
               {" "}
               delivered fast
             </span>
@@ -56,7 +52,7 @@ export default function HomePage() {
             <Button
               asChild
               size="lg"
-              className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-8 py-6 text-lg"
+              className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-8 py-6 text-lg"
             >
               <Link href="/auth/customer/signin">Order Now</Link>
             </Button>
@@ -73,8 +69,8 @@ export default function HomePage() {
         <div className="grid md:grid-cols-3 gap-8">
           <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow duration-300">
             <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock className="w-8 h-8 text-orange-500" />
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock className="w-8 h-8 text-red-500" />
               </div>
               <h3 className="text-xl font-semibold mb-2">Fast Delivery</h3>
               <p className="text-gray-600">Get your food delivered in 30 minutes or less with real-time tracking</p>
@@ -170,10 +166,10 @@ export default function HomePage() {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-gradient-to-r from-red-500 to-red-600 rounded-lg flex items-center justify-center">
                   <ChefHat className="w-5 h-5 text-white" />
                 </div>
-                <span className="text-2xl font-bold">Food Hub</span>
+                <span className="text-2xl font-bold">FoodHub</span>
               </div>
               <p className="text-gray-400 mb-4">
                 Delivering happiness, one meal at a time. Fast, fresh, and always delicious.
@@ -274,7 +270,7 @@ export default function HomePage() {
           </div>
 
           <div className="border-t border-gray-800 mt-12 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 Food Hub. All rights reserved.</p>
+            <p>&copy; 2024 FoodHub. All rights reserved.</p>
           </div>
         </div>
       </footer>

@@ -47,6 +47,9 @@ model User {
   role          UserRole  @default(CUSTOMER)
   phone         String?
   address       String?
+  dateOfBirth   DateTime? @map("date_of_birth")
+  language      String?
+  timeZone      String?   @map("time_zone")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -55,6 +58,7 @@ model User {
   customerProfile   CustomerProfile?
   driverProfile     DriverProfile?
   restaurantProfile RestaurantProfile?
+  orders            Order[]
 
   @@map("users")
 }
@@ -148,6 +152,7 @@ model RestaurantProfile {
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   menuItems MenuItem[]
+  orders    Order[]
 
   @@map("restaurant_profiles")
 }
@@ -171,6 +176,7 @@ model MenuItem {
 
   restaurant    RestaurantProfile @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   modifications Modification[]
+  orderItems    OrderItem[]
 
   @@map("menu_items")
 }
@@ -186,4 +192,36 @@ model Modification {
   menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
   @@map("modifications")
+}
+
+model Order {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  restaurantId String   @map("restaurant_id")
+  total        Float
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant RestaurantProfile @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String   @id @default(cuid())
+  orderId             String   @map("order_id")
+  menuItemId          String   @map("menu_item_id")
+  quantity            Int
+  price               Float
+  specialInstructions String?  @map("special_instructions")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
 }

@@ -1,10 +1,25 @@
+import { auth } from "@/lib/auth"
+import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Store, TrendingUp, Users, Clock, BarChart3, Smartphone, Headphones, Award } from "lucide-react"
 
-export default function RestaurantPage() {
+export default async function RestaurantPage() {
+  const session = await auth()
+
+  // If the user is logged in and is a restaurant, redirect to their dashboard
+  if (session?.user?.role === "RESTAURANT") {
+    redirect("/restaurant/dashboard")
+  }
+
+  // If they are logged in but not a restaurant, redirect to a generic unauthorized page
+  if (session?.user) {
+    redirect("/unauthorized")
+  }
+
+  // If not logged in, show a landing page to sign in or register
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50">
       {/* Navigation */}
@@ -56,7 +71,7 @@ export default function RestaurantPage() {
               >
                 <Link href="/auth/restaurant/signin">Get Started</Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="px-8 py-6 text-lg">
+              <Button asChild variant="outline" size="lg" className="px-8 py-6 text-lg bg-transparent">
                 <Link href="#benefits">Learn More</Link>
               </Button>
             </div>
@@ -182,7 +197,7 @@ export default function RestaurantPage() {
               asChild
               variant="outline"
               size="lg"
-              className="border-white text-white hover:bg-white hover:text-green-600 px-8 py-6 text-lg"
+              className="border-white text-white hover:bg-white hover:text-green-600 px-8 py-6 text-lg bg-transparent"
             >
               <Link href="/customer-service">Contact Sales</Link>
             </Button>

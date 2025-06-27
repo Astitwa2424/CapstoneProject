@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import type { Modification } from "@prisma/client"
+import { Modification } from "@prisma/client"
 
 export interface MenuItemFormData {
   name: string
@@ -16,51 +16,33 @@ export interface MenuItemFormData {
   isVegetarian?: boolean
   isVegan?: boolean
   isGlutenFree?: boolean
+  isActive?: boolean
 }
 
-export async function checkDatabaseSetup() {
-  try {
-    const count = await prisma.menuItem.count()
-    return { success: true, message: `Database connected. Found ${count} menu items.` }
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Database setup check failed:", errorMessage)
-    return { success: false, message: `Database error: ${errorMessage}` }
-  }
+async function getRestaurantIdFromSession() {
+  const session = await auth()
+  if (!session?.user?.id) throw new Error("Not authenticated")
+
+  const restaurantProfile = await prisma.restaurantProfile.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true },
+  })
+
+  if (!restaurantProfile) throw new Error("Restaurant profile not found")
+  return restaurantProfile.id
 }
 
 export async function createMenuItem(data: MenuItemFormData) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated" }
-    }
+    const restaurantId = await getRestaurantIdFromSession()
 
-    const restaurantProfile = await prisma.restaurantProfile.findUnique({
-      where: { userId: session.user.id },
-    })
-
-    if (!restaurantProfile) {
-      return { success: false, error: "Restaurant profile not found" }
-    }
-
-    let allergensArray: string[] = []
-    if (data.allergens) {
-      try {
-        allergensArray = Array.isArray(data.allergens)
-          ? data.allergens
-          : data.allergens
-              .split(",")
-              .map((item) => item.trim())
-              .filter(Boolean)
-      } catch {
-        allergensArray = []
-      }
-    }
+    const allergensArray = data.allergens
+      ? data.allergens.split(",").map((s) => s.trim())
+      : []
 
     const menuItem = await prisma.menuItem.create({
       data: {
-        restaurantId: restaurantProfile.id,
+        restaurantId,
         name: data.name,
         description: data.description,
         price: data.price,
@@ -71,85 +53,35 @@ export async function createMenuItem(data: MenuItemFormData) {
         isVegetarian: data.isVegetarian || false,
         isVegan: data.isVegan || false,
         isGlutenFree: data.isGlutenFree || false,
+        isActive: data.isActive ?? true,
       },
     })
 
-    revalidatePath("/restaurant/dashboard/menu")
-    return { success: true, menuItem }
+    revalidatePath("/customer/dashboard")
+    revalidatePath(`/customer/restaurant/${restaurantId}`)
+
+    return {
+      success: true,
+      menuItem,
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error creating menu item:", errorMessage)
-    return { success: false, error: errorMessage }
-  }
-}
-
-export async function getMenuItemById(menuItemId: string) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated" }
+    return {
+      success: false,
+      error: errorMessage,
     }
-
-    const menuItem = await prisma.menuItem.findFirst({
-      where: {
-        id: menuItemId,
-        restaurant: {
-          userId: session.user.id,
-        },
-      },
-      include: {
-        modifications: true,
-      },
-    })
-
-    if (!menuItem) {
-      return { success: false, error: "Menu item not found or unauthorized" }
-    }
-
-    return { success: true, menuItem }
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error fetching menu item:", errorMessage)
-    return { success: false, error: errorMessage }
   }
 }
 
 export async function updateMenuItem(menuItemId: string, data: MenuItemFormData) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated" }
-    }
-
-    const existingItem = await prisma.menuItem.findFirst({
-      where: {
-        id: menuItemId,
-        restaurant: {
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!existingItem) {
-      return { success: false, error: "Menu item not found or unauthorized" }
-    }
-
-    let allergensArray: string[] = []
-    if (data.allergens) {
-      try {
-        allergensArray = Array.isArray(data.allergens)
-          ? data.allergens
-          : data.allergens
-              .split(",")
-              .map((item) => item.trim())
-              .filter(Boolean)
-      } catch {
-        allergensArray = []
-      }
-    }
+    const restaurantId = await getRestaurantIdFromSession()
+    const allergensArray = data.allergens
+      ? data.allergens.split(",").map((s) => s.trim())
+      : []
 
     const updatedMenuItem = await prisma.menuItem.update({
-      where: { id: menuItemId },
+      where: { id: menuItemId, restaurantId },
       data: {
         name: data.name,
         description: data.description,
@@ -161,139 +93,100 @@ export async function updateMenuItem(menuItemId: string, data: MenuItemFormData)
         isVegetarian: data.isVegetarian || false,
         isVegan: data.isVegan || false,
         isGlutenFree: data.isGlutenFree || false,
+        isActive: data.isActive ?? true,
       },
     })
 
-    revalidatePath("/restaurant/dashboard/menu")
+    revalidatePath("/customer/dashboard")
+    revalidatePath(`/customer/restaurant/${restaurantId}`)
     revalidatePath(`/restaurant/dashboard/menu/${menuItemId}/edit`)
-    return { success: true, menuItem: updatedMenuItem }
+
+    return {
+      success: true,
+      menuItem: updatedMenuItem,
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error updating menu item:", errorMessage)
-    return { success: false, error: errorMessage }
+    return {
+      success: false,
+      error: errorMessage,
+    }
   }
 }
 
 export async function getMenuItemsForRestaurant() {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated", menuItems: [] }
-    }
-
-    const restaurantProfile = await prisma.restaurantProfile.findUnique({
-      where: { userId: session.user.id },
-      include: {
-        menuItems: {
-          include: {
-            modifications: true,
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
+    const restaurantId = await getRestaurantIdFromSession()
+    const menuItems = await prisma.menuItem.findMany({
+      where: { restaurantId },
+      include: { modifications: true },
+      orderBy: { createdAt: "desc" },
     })
 
-    if (!restaurantProfile) {
-      return { success: false, error: "Restaurant profile not found", menuItems: [] }
+    return {
+      success: true,
+      menuItems,
     }
-
-    return { success: true, menuItems: restaurantProfile.menuItems }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error fetching menu items:", errorMessage)
-    return { success: false, error: errorMessage, menuItems: [] }
+    return {
+      success: false,
+      error: errorMessage,
+      menuItems: [],
+    }
   }
 }
 
 export async function deleteMenuItem(menuItemId: string) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated" }
-    }
-
-    const menuItem = await prisma.menuItem.findFirst({
-      where: {
-        id: menuItemId,
-        restaurant: {
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!menuItem) {
-      return { success: false, error: "Menu item not found or unauthorized" }
-    }
-
+    const restaurantId = await getRestaurantIdFromSession()
     await prisma.menuItem.delete({
-      where: { id: menuItemId },
+      where: { id: menuItemId, restaurantId },
     })
 
-    revalidatePath("/restaurant/dashboard/menu")
+    revalidatePath("/customer/dashboard")
+    revalidatePath(`/customer/restaurant/${restaurantId}`)
+
     return { success: true }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error deleting menu item:", errorMessage)
-    return { success: false, error: errorMessage }
+    return {
+      success: false,
+      error: errorMessage,
+    }
   }
 }
 
 export async function updateMenuItemActiveStatus(menuItemId: string, isActive: boolean) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated" }
-    }
-
-    const menuItem = await prisma.menuItem.findFirst({
-      where: {
-        id: menuItemId,
-        restaurant: {
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!menuItem) {
-      return { success: false, error: "Menu item not found or unauthorized" }
-    }
-
+    const restaurantId = await getRestaurantIdFromSession()
     await prisma.menuItem.update({
-      where: { id: menuItemId },
+      where: { id: menuItemId, restaurantId },
       data: { isActive },
     })
 
-    revalidatePath("/restaurant/dashboard/menu")
+    revalidatePath("/customer/dashboard")
+    revalidatePath(`/customer/restaurant/${restaurantId}`)
+
     return { success: true }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error updating menu item status:", errorMessage)
-    return { success: false, error: errorMessage }
+    return {
+      success: false,
+      error: errorMessage,
+    }
   }
 }
 
 export async function duplicateMenuItem(menuItemId: string) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return { success: false, error: "Not authenticated" }
-    }
-
-    const originalItem = await prisma.menuItem.findFirst({
-      where: {
-        id: menuItemId,
-        restaurant: {
-          userId: session.user.id,
-        },
-      },
-      include: {
-        modifications: true,
-      },
+    const restaurantId = await getRestaurantIdFromSession()
+    const originalItem = await prisma.menuItem.findUnique({
+      where: { id: menuItemId, restaurantId },
+      include: { modifications: true },
     })
 
-    if (!originalItem) {
-      return { success: false, error: "Menu item not found or unauthorized" }
-    }
+    if (!originalItem) throw new Error("Original item not found")
 
     const duplicatedItem = await prisma.menuItem.create({
       data: {
@@ -323,10 +216,43 @@ export async function duplicateMenuItem(menuItemId: string) {
     }
 
     revalidatePath("/restaurant/dashboard/menu")
-    return { success: true, menuItem: duplicatedItem }
+    return {
+      success: true,
+      menuItem: duplicatedItem,
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-    console.error("Error duplicating menu item:", errorMessage)
-    return { success: false, error: errorMessage }
+    return {
+      success: false,
+      error: errorMessage,
+    }
+  }
+}
+
+export async function getMenuItemById(menuItemId: string) {
+  try {
+    const restaurantId = await getRestaurantIdFromSession()
+    const menuItem = await prisma.menuItem.findFirst({
+      where: { id: menuItemId, restaurantId },
+      include: { modifications: true },
+    })
+
+    if (!menuItem) {
+      return {
+        success: false,
+        error: "Menu item not found",
+      }
+    }
+
+    return {
+      success: true,
+      menuItem,
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
+    return {
+      success: false,
+      error: errorMessage,
+    }
   }
 }

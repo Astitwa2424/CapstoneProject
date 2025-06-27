@@ -1,209 +1,180 @@
 import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { prisma } from "@/lib/prisma"
+import { DashboardHeader } from "@/components/customer/dashboard-header"
+import { RestaurantCard } from "@/components/customer/restaurant-card"
+import { FoodItemCard } from "@/components/customer/food-item-card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ShoppingBag, Star, Heart, User, CreditCard } from "lucide-react"
-import { LogoutButton } from "@/components/auth/logout-button"
+import { redirect } from "next/navigation"
+
+async function getRestaurants() {
+  const restaurants = await prisma.restaurantProfile.findMany({
+    include: {
+      menuItems: {
+        take: 4,
+        where: {
+          isActive: true,
+        },
+      },
+    },
+  })
+
+  return restaurants
+}
+
+async function getPopularItems() {
+  const menuItems = await prisma.menuItem.findMany({
+    where: {
+      isActive: true,
+    },
+    include: {
+      restaurant: true,
+    },
+    take: 4,
+    orderBy: {
+      createdAt: "desc",
+    },
+  })
+
+  return menuItems
+}
 
 export default async function CustomerDashboard() {
-  console.log("🏠 Customer Dashboard - Starting auth check")
-
   const session = await auth()
-  console.log("🏠 Customer Dashboard - Session:", session ? "exists" : "null")
-  console.log("🏠 Customer Dashboard - User role:", session?.user?.role)
 
-  // Check if user is authenticated
-  if (!session?.user) {
-    console.log("❌ Customer Dashboard - No session, redirecting to customer signin")
-    redirect("/auth/customer/signin")
+  if (!session?.user || session.user.role !== "CUSTOMER") {
+    redirect("/auth/signin")
   }
 
-  // Check if user has the right role (allow any role for now to test)
-  if (session.user.role !== "CUSTOMER") {
-    console.log("❌ Customer Dashboard - Wrong role, redirecting to unauthorized")
-    redirect("/unauthorized")
-  }
+  const restaurants = await getRestaurants()
+  const popularItems = await getPopularItems()
 
-  console.log("✅ Customer Dashboard - Access granted")
+  const categories = [
+    { name: "All", active: true },
+    { name: "Italian", active: false },
+    { name: "Asian", active: false },
+    { name: "American", active: false },
+    { name: "Mexican", active: false },
+    { name: "Healthy", active: false },
+    { name: "Desserts", active: false },
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Welcome back, {session.user.name}!</h1>
-              <p className="text-gray-600">Ready to order some delicious food?</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button variant="outline">
-                <User className="w-4 h-4 mr-2" />
-                Profile
+      <DashboardHeader />
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Search and Filters */}
+        <div className="mb-8">
+          {/* Category Filters */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {categories.map((category) => (
+              <Button
+                key={category.name}
+                variant={category.active ? "default" : "outline"}
+                size="sm"
+                className={category.active ? "bg-red-500 hover:bg-red-600" : ""}
+              >
+                {category.name}
               </Button>
-              <LogoutButton />
-              <Button>
-                <ShoppingBag className="w-4 h-4 mr-2" />
-                Order Now
-              </Button>
-            </div>
+            ))}
+          </div>
+
+          {/* Sort and Filter Options */}
+          <div className="flex flex-wrap gap-4 text-sm">
+            <Button variant="ghost" size="sm">
+              Sort: Recommended
+            </Button>
+            <Button variant="ghost" size="sm">
+              Price Range
+            </Button>
+            <Button variant="ghost" size="sm">
+              Dietary
+            </Button>
+            <Button variant="ghost" size="sm">
+              Delivery Time
+            </Button>
           </div>
         </div>
-      </div>
 
-      <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="orders">My Orders</TabsTrigger>
-            <TabsTrigger value="favorites">Favorites</TabsTrigger>
-            <TabsTrigger value="account">Account</TabsTrigger>
-          </TabsList>
+        {/* Featured Restaurants */}
+        <section className="mb-12">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Featured Restaurants</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {restaurants.slice(0, 3).map((restaurant) => (
+              <RestaurantCard key={restaurant.id} restaurant={restaurant} featured={true} />
+            ))}
+          </div>
+        </section>
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Quick Stats */}
-            <div className="grid md:grid-cols-4 gap-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Orders</p>
-                      <p className="text-2xl font-bold">24</p>
-                    </div>
-                    <ShoppingBag className="w-8 h-8 text-orange-500" />
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Popular Right Now */}
+        <section className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Popular Right Now</h2>
+            <Button variant="ghost" className="text-red-500 hover:text-red-600">
+              View all →
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {popularItems.map((item) => (
+              <FoodItemCard key={item.id} item={item} />
+            ))}
+          </div>
+        </section>
 
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Money Saved</p>
-                      <p className="text-2xl font-bold">$127</p>
-                    </div>
-                    <CreditCard className="w-8 h-8 text-green-500" />
-                  </div>
-                </CardContent>
-              </Card>
+        {/* All Restaurants */}
+        <section>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">All Restaurants</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {restaurants.map((restaurant) => (
+              <RestaurantCard key={restaurant.id} restaurant={restaurant} featured={false} />
+            ))}
+          </div>
+        </section>
+      </main>
 
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Favorite Restaurants</p>
-                      <p className="text-2xl font-bold">8</p>
-                    </div>
-                    <Heart className="w-8 h-8 text-red-500" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Avg. Rating Given</p>
-                      <p className="text-2xl font-bold">4.8</p>
-                    </div>
-                    <Star className="w-8 h-8 text-yellow-500" />
-                  </div>
-                </CardContent>
-              </Card>
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <h3 className="text-lg font-semibold mb-4">FoodHub</h3>
+              <p className="text-gray-400 text-sm">
+                The best food ordering platform for your favorite local restaurants.
+              </p>
             </div>
-
-            {/* Recent Orders */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Orders</CardTitle>
-                <CardDescription>Your latest food orders</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    {
-                      restaurant: "Pizza Palace",
-                      items: "2x Margherita Pizza",
-                      status: "Delivered",
-                      time: "2 hours ago",
-                      amount: "$24.99",
-                    },
-                    {
-                      restaurant: "Burger Barn",
-                      items: "1x Classic Burger, 1x Fries",
-                      status: "Delivered",
-                      time: "1 day ago",
-                      amount: "$18.50",
-                    },
-                    {
-                      restaurant: "Sushi Zen",
-                      items: "1x Salmon Roll, 1x Tuna Roll",
-                      status: "Delivered",
-                      time: "3 days ago",
-                      amount: "$32.00",
-                    },
-                  ].map((order, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-                        <div>
-                          <p className="font-semibold">{order.restaurant}</p>
-                          <p className="text-sm text-gray-600">{order.items}</p>
-                          <p className="text-xs text-gray-500">{order.time}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant="secondary" className="mb-1">
-                          {order.status}
-                        </Badge>
-                        <p className="font-semibold">{order.amount}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="orders">
-            <Card>
-              <CardHeader>
-                <CardTitle>Order History</CardTitle>
-                <CardDescription>All your past orders</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">Order history will be displayed here...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="favorites">
-            <Card>
-              <CardHeader>
-                <CardTitle>Favorite Restaurants</CardTitle>
-                <CardDescription>Your most loved places to order from</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">Favorite restaurants will be displayed here...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="account">
-            <Card>
-              <CardHeader>
-                <CardTitle>Account Settings</CardTitle>
-                <CardDescription>Manage your account preferences</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">Account settings will be displayed here...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+            <div>
+              <h4 className="font-semibold mb-4">About</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>About Us</li>
+                <li>Careers</li>
+                <li>Blog</li>
+                <li>Press</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-4">Help</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>Contact</li>
+                <li>Support</li>
+                <li>FAQ</li>
+                <li>Affiliates</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-4">Legal</h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>Terms</li>
+                <li>Privacy</li>
+                <li>Cookies</li>
+                <li>Licenses</li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400">
+            © 2025 FoodHub. All rights reserved.
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

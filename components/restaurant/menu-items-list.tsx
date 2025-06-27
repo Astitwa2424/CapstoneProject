@@ -9,7 +9,7 @@ import {
   updateMenuItemActiveStatus,
   duplicateMenuItem,
 } from "@/app/restaurant/actions"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import { Loader2, ChefHat } from "lucide-react"
 import type { MenuItem, Modification } from "@prisma/client"
 
@@ -22,7 +22,6 @@ export function MenuItemsList() {
   const [menuItems, setMenuItems] = useState<MenuItemWithModifications[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
-  const { toast } = useToast()
 
   const loadMenuItems = async () => {
     setIsLoading(true)
@@ -31,18 +30,10 @@ export function MenuItemsList() {
       if (result.success) {
         setMenuItems(result.menuItems)
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error loading menu",
-          description: result.error || "Failed to load menu items.",
-        })
+        toast.error(result.error || "Failed to load menu items.")
       }
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "An unexpected error occurred while loading menu items.",
-      })
+      toast.error("An unexpected error occurred while loading menu items.")
     } finally {
       setIsLoading(false)
     }
@@ -60,17 +51,10 @@ export function MenuItemsList() {
     startTransition(async () => {
       const result = await deleteMenuItem(itemId)
       if (result.success) {
-        toast({
-          title: "Success",
-          description: "Menu item deleted successfully.",
-        })
+        toast.success("Menu item deleted successfully.")
         await loadMenuItems()
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.error || "Failed to delete menu item.",
-        })
+        toast.error(result.error || "Failed to delete menu item.")
       }
     })
   }
@@ -79,17 +63,10 @@ export function MenuItemsList() {
     startTransition(async () => {
       const result = await updateMenuItemActiveStatus(itemId, isActive)
       if (result.success) {
-        toast({
-          title: "Success",
-          description: `Menu item ${isActive ? "activated" : "deactivated"}.`,
-        })
+        toast.success(`Menu item ${isActive ? "activated" : "deactivated"}.`)
         await loadMenuItems()
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.error || "Failed to update menu item.",
-        })
+        toast.error(result.error || "Failed to update menu item.")
       }
     })
   }
@@ -98,17 +75,10 @@ export function MenuItemsList() {
     startTransition(async () => {
       const result = await duplicateMenuItem(itemId)
       if (result.success) {
-        toast({
-          title: "Success",
-          description: "Menu item duplicated successfully.",
-        })
+        toast.success("Menu item duplicated successfully.")
         await loadMenuItems()
       } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: result.error || "Failed to duplicate menu item.",
-        })
+        toast.error(result.error || "Failed to duplicate menu item.")
       }
     })
   }

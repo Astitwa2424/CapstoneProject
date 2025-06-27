@@ -12,48 +12,26 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { upsertRestaurantProfile } from "@/app/restaurant/profile/actions"
+import { updateRestaurantProfile } from "@/app/restaurant/profile/actions"
 import { Loader2 } from "lucide-react"
 
-// Define the form schema
 const formSchema = z.object({
   name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
   description: z.string().optional(),
   phone: z.string().min(5, { message: "Phone number is required." }),
-  email: z.string().email().optional().or(z.literal("")),
-  website: z.string().url().optional().or(z.literal("")),
+  address: z.string().min(5, { message: "Address is required." }),
+  cuisine: z.string().min(1, { message: "Please select a cuisine type." }),
   category: z.string().optional(),
-
-  // Address
-  streetAddress: z.string().min(5, { message: "Street address is required." }),
-  city: z.string().min(2, { message: "City is required." }),
-  state: z.string().optional(),
-  postalCode: z.string().optional(),
-  country: z.string().optional(),
-
-  // Business details
+  website: z.string().url().optional().or(z.literal("")),
+  deliveryFee: z.string().optional(),
+  minOrder: z.string().optional(),
   businessRegistrationNumber: z.string().optional(),
   taxId: z.string().optional(),
-
-  // Social media
-  facebookUrl: z.string().url().optional().or(z.literal("")),
-  instagramUrl: z.string().url().optional().or(z.literal("")),
-  twitterUrl: z.string().url().optional().or(z.literal("")),
-
-  // Operating hours - stored as JSON
-  operatingHours: z.string().optional(),
-
-  // Bank details
   bankAccountNumber: z.string().optional(),
   bankName: z.string().optional(),
   swiftCode: z.string().optional(),
-
-  // Map location
-  mapLatitude: z.string().optional(),
-  mapLongitude: z.string().optional(),
 })
 
-// Define the props
 interface RestaurantProfileFormProps {
   initialData?: any
 }
@@ -62,102 +40,47 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Default operating hours structure
-  const defaultOperatingHours = {
-    monday: { open: "09:00", close: "22:00", isClosed: false },
-    tuesday: { open: "09:00", close: "22:00", isClosed: false },
-    wednesday: { open: "09:00", close: "22:00", isClosed: false },
-    thursday: { open: "09:00", close: "22:00", isClosed: false },
-    friday: { open: "09:00", close: "22:00", isClosed: false },
-    saturday: { open: "09:00", close: "22:00", isClosed: false },
-    sunday: { open: "09:00", close: "22:00", isClosed: false },
-  }
-
-  // Parse operating hours from JSON if available
-  let parsedOperatingHours = defaultOperatingHours
-  try {
-    if (initialData?.operatingHours) {
-      parsedOperatingHours =
-        typeof initialData.operatingHours === "string"
-          ? JSON.parse(initialData.operatingHours)
-          : initialData.operatingHours
-    }
-  } catch (e) {
-    console.error("Error parsing operating hours:", e)
-  }
-
-  // Initialize form with default values or existing data
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: initialData?.name || "",
       description: initialData?.description || "",
       phone: initialData?.phone || "",
-      email: initialData?.email || "",
-      website: initialData?.website || "",
+      address: initialData?.address || "",
+      cuisine: Array.isArray(initialData?.cuisine) ? initialData.cuisine[0] : initialData?.cuisine || "",
       category: initialData?.category || "",
-
-      streetAddress: initialData?.streetAddress || "",
-      city: initialData?.city || "",
-      state: initialData?.state || "",
-      postalCode: initialData?.postalCode || "",
-      country: initialData?.country || "",
-
+      website: initialData?.website || "",
+      deliveryFee: initialData?.deliveryFee?.toString() || "2.99",
+      minOrder: initialData?.minOrder?.toString() || "15.00",
       businessRegistrationNumber: initialData?.businessRegistrationNumber || "",
       taxId: initialData?.taxId || "",
-
-      facebookUrl: initialData?.facebookUrl || "",
-      instagramUrl: initialData?.instagramUrl || "",
-      twitterUrl: initialData?.twitterUrl || "",
-
-      operatingHours: JSON.stringify(parsedOperatingHours, null, 2),
-
       bankAccountNumber: initialData?.bankAccountNumber || "",
       bankName: initialData?.bankName || "",
       swiftCode: initialData?.swiftCode || "",
-
-      mapLatitude: initialData?.mapLatitude?.toString() || "",
-      mapLongitude: initialData?.mapLongitude?.toString() || "",
     },
   })
 
-  // Handle form submission
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true)
 
     try {
-      // Create FormData object
       const formData = new FormData()
-
-      // Append all form values
       Object.entries(values).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           formData.append(key, value)
         }
       })
 
-      // Submit the form
-      const result = await upsertRestaurantProfile(formData)
+      const result = await updateRestaurantProfile(formData)
 
       if (result.success) {
-        toast({
-          title: "Profile updated",
-          description: "Your restaurant profile has been updated successfully.",
-        })
+        toast.success("Profile updated successfully! Changes will be visible to customers.")
         router.refresh()
       } else {
-        toast({
-          title: "Error",
-          description: result.message || "Failed to update profile. Please try again.",
-          variant: "destructive",
-        })
+        toast.error(result.message || "Failed to update profile. Please try again.")
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      })
+      toast.error("An unexpected error occurred. Please try again.")
       console.error("Profile update error:", error)
     } finally {
       setIsSubmitting(false)
@@ -170,8 +93,8 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
         {/* Basic Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
-            <CardDescription>Enter your restaurant's profile and business details</CardDescription>
+            <CardTitle>Restaurant Information</CardTitle>
+            <CardDescription>This information will be visible to customers</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <FormField
@@ -181,65 +104,8 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
                 <FormItem>
                   <FormLabel>Restaurant Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Restaurant Name" {...field} />
+                    <Input placeholder="Your Restaurant Name" {...field} />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="businessRegistrationNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Business Registration</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Business Registration Number" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="taxId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tax ID</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Tax ID" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Restaurant Category</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Fine Dining">Fine Dining</SelectItem>
-                      <SelectItem value="Casual Dining">Casual Dining</SelectItem>
-                      <SelectItem value="Fast Food">Fast Food</SelectItem>
-                      <SelectItem value="Cafe">Cafe</SelectItem>
-                      <SelectItem value="Bistro">Bistro</SelectItem>
-                      <SelectItem value="Buffet">Buffet</SelectItem>
-                      <SelectItem value="Food Truck">Food Truck</SelectItem>
-                      <SelectItem value="Pub">Pub</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -258,18 +124,78 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
                       {...field}
                     />
                   </FormControl>
+                  <FormDescription>This description will appear on your restaurant page</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="cuisine"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cuisine Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select cuisine type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Italian">Italian</SelectItem>
+                        <SelectItem value="Chinese">Chinese</SelectItem>
+                        <SelectItem value="Mexican">Mexican</SelectItem>
+                        <SelectItem value="Indian">Indian</SelectItem>
+                        <SelectItem value="American">American</SelectItem>
+                        <SelectItem value="Japanese">Japanese</SelectItem>
+                        <SelectItem value="Thai">Thai</SelectItem>
+                        <SelectItem value="Mediterranean">Mediterranean</SelectItem>
+                        <SelectItem value="French">French</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Restaurant Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Fine Dining">Fine Dining</SelectItem>
+                        <SelectItem value="Casual Dining">Casual Dining</SelectItem>
+                        <SelectItem value="Fast Food">Fast Food</SelectItem>
+                        <SelectItem value="Cafe">Cafe</SelectItem>
+                        <SelectItem value="Bistro">Bistro</SelectItem>
+                        <SelectItem value="Food Truck">Food Truck</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 
-        {/* Contact Information */}
+        {/* Contact & Location */}
         <Card>
           <CardHeader>
-            <CardTitle>Contact Information</CardTitle>
-            <CardDescription>How customers can reach your restaurant</CardDescription>
+            <CardTitle>Contact & Location</CardTitle>
+            <CardDescription>How customers can find and contact you</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <FormField
@@ -277,9 +203,9 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Primary Phone</FormLabel>
+                  <FormLabel>Phone Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="Phone Number" {...field} />
+                    <Input placeholder="+1 (555) 123-4567" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -288,12 +214,12 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
 
             <FormField
               control={form.control}
-              name="email"
+              name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email Address</FormLabel>
+                  <FormLabel>Address</FormLabel>
                   <FormControl>
-                    <Input placeholder="contact@yourrestaurant.com" {...field} />
+                    <Input placeholder="123 Main St, City, State 12345" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -305,7 +231,7 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
               name="website"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Website</FormLabel>
+                  <FormLabel>Website (Optional)</FormLabel>
                   <FormControl>
                     <Input placeholder="https://www.yourrestaurant.com" {...field} />
                   </FormControl>
@@ -313,87 +239,27 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
                 </FormItem>
               )}
             />
-
-            <div>
-              <h3 className="text-sm font-medium mb-2">Social Media</h3>
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="facebookUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Facebook URL</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://facebook.com/yourrestaurant" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="instagramUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Instagram URL</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://instagram.com/yourrestaurant" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="twitterUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Twitter URL</FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://twitter.com/yourrestaurant" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
           </CardContent>
         </Card>
 
-        {/* Location */}
+        {/* Delivery Settings */}
         <Card>
           <CardHeader>
-            <CardTitle>Location</CardTitle>
-            <CardDescription>Your restaurant's physical address</CardDescription>
+            <CardTitle>Delivery Settings</CardTitle>
+            <CardDescription>Configure your delivery options</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <FormField
-              control={form.control}
-              name="streetAddress"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Street Address</FormLabel>
-                  <FormControl>
-                    <Input placeholder="123 Example Street" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="city"
+                name="deliveryFee"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>City</FormLabel>
+                    <FormLabel>Delivery Fee ($)</FormLabel>
                     <FormControl>
-                      <Input placeholder="City" {...field} />
+                      <Input placeholder="2.99" {...field} />
                     </FormControl>
+                    <FormDescription>Set to 0 for free delivery</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -401,163 +267,101 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
 
               <FormField
                 control={form.control}
-                name="state"
+                name="minOrder"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>State</FormLabel>
+                    <FormLabel>Minimum Order ($)</FormLabel>
                     <FormControl>
-                      <Input placeholder="State" {...field} />
+                      <Input placeholder="15.00" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="postalCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Postal Code</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Postal Code" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="country"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Country</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Country" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div>
-              <h3 className="text-sm font-medium mb-2">Map Location</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="mapLatitude"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Latitude</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. 40.7128" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="mapLongitude"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Longitude</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. -74.0060" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="mt-4 bg-muted h-[200px] rounded-md flex items-center justify-center">
-                <p className="text-muted-foreground text-sm">Map preview will be displayed here</p>
-              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Operating Hours */}
+        {/* Business Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Operating Hours</CardTitle>
-            <CardDescription>Set your restaurant's opening and closing times</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FormField
-              control={form.control}
-              name="operatingHours"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Operating Hours (JSON format)</FormLabel>
-                  <FormControl>
-                    <Textarea className="font-mono text-xs h-[300px]" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Enter your operating hours in JSON format. Example:{" "}
-                    {`{"monday": {"open": "09:00", "close": "22:00", "isClosed": false}}`}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Payment Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Information</CardTitle>
-            <CardDescription>Your bank details for receiving payments</CardDescription>
+            <CardTitle>Business Information</CardTitle>
+            <CardDescription>Business registration and payment details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <FormField
-              control={form.control}
-              name="bankAccountNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bank Account Number</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Bank Account Number" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="businessRegistrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Business Registration Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="123456789" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="bankName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bank Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Bank Name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="taxId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tax ID</FormLabel>
+                    <FormControl>
+                      <Input placeholder="12-3456789" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-            <FormField
-              control={form.control}
-              name="swiftCode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Swift Code</FormLabel>
-                  <FormControl>
-                    <Input placeholder="SWIFT/BIC Code" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="bankAccountNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bank Account Number</FormLabel>
+                    <FormControl>
+                      <Input placeholder="1234567890" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bankName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bank Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Bank of America" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="swiftCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SWIFT Code</FormLabel>
+                    <FormControl>
+                      <Input placeholder="BOFAUS3N" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
 

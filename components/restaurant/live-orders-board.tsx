@@ -4,8 +4,10 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Phone, User, DollarSign, CheckCircle, AlertCircle, Truck } from "lucide-react"
+import { Clock, User, DollarSign, CheckCircle, AlertCircle, Truck } from "lucide-react"
 import { toast } from "sonner"
+import { getSocket } from "@/lib/socket"
+import { useSession } from "next-auth/react"
 
 interface Order {
   id: string
@@ -27,63 +29,6 @@ interface Order {
   deliveryType: "delivery" | "pickup"
 }
 
-// Mock data - replace with real data from your API
-const mockOrders: Order[] = [
-  {
-    id: "1",
-    orderNumber: "ORD-001",
-    customerName: "John Smith",
-    customerPhone: "+1 (555) 123-4567",
-    customerAddress: "123 Main St, Sydney NSW 2000",
-    items: [
-      { name: "Margherita Pizza", quantity: 1, price: 18.5 },
-      { name: "Caesar Salad", quantity: 1, price: 12.0 },
-      { name: "Garlic Bread", quantity: 2, price: 6.5 },
-    ],
-    total: 37.0,
-    status: "new",
-    orderTime: "2024-01-15T14:30:00Z",
-    estimatedTime: 25,
-    paymentMethod: "Card",
-    deliveryType: "delivery",
-  },
-  {
-    id: "2",
-    orderNumber: "ORD-002",
-    customerName: "Sarah Johnson",
-    customerPhone: "+1 (555) 987-6543",
-    customerAddress: "456 Oak Ave, Sydney NSW 2001",
-    items: [
-      { name: "Chicken Burger", quantity: 2, price: 15.0 },
-      { name: "Sweet Potato Fries", quantity: 1, price: 8.5 },
-    ],
-    total: 38.5,
-    status: "preparing",
-    orderTime: "2024-01-15T14:15:00Z",
-    estimatedTime: 20,
-    paymentMethod: "Cash",
-    deliveryType: "pickup",
-  },
-  {
-    id: "3",
-    orderNumber: "ORD-003",
-    customerName: "Mike Wilson",
-    customerPhone: "+1 (555) 456-7890",
-    customerAddress: "789 Pine St, Sydney NSW 2002",
-    items: [
-      { name: "Fish & Chips", quantity: 1, price: 16.5 },
-      { name: "Mushy Peas", quantity: 1, price: 4.5 },
-      { name: "Tartar Sauce", quantity: 1, price: 2.0 },
-    ],
-    total: 23.0,
-    status: "ready",
-    orderTime: "2024-01-15T14:00:00Z",
-    estimatedTime: 15,
-    paymentMethod: "Card",
-    deliveryType: "delivery",
-  },
-]
-
 const statusConfig = {
   new: { color: "bg-blue-100 text-blue-800", label: "New Order", icon: AlertCircle },
   accepted: { color: "bg-yellow-100 text-yellow-800", label: "Accepted", icon: CheckCircle },
@@ -93,15 +38,59 @@ const statusConfig = {
   delivered: { color: "bg-gray-100 text-gray-800", label: "Delivered", icon: CheckCircle },
 }
 
+// We need a way to get the restaurant ID on the client
+async function getRestaurantIdForCurrentUser(userId: string) {
+  // This is a placeholder for an API call or a server action
+  // In a real app, you'd fetch this securely
+  console.log("Fetching restaurant ID for user:", userId)
+  return "clzof8z5w0001r9vwhqg1h1z2" // Replace with actual logic
+}
+
 export function LiveOrdersBoard() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders)
+  const [orders, setOrders] = useState<Order[]>([])
   const [currentTime, setCurrentTime] = useState(new Date())
+  const { data: session } = useSession()
+  const [restaurantId, setRestaurantId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      // In a real app, you'd fetch this from an API endpoint
+      const fetchRestaurantId = async () => {
+        const profile = await fetch("/api/restaurant/profile-id").then((res) => res.json())
+        if (profile.id) {
+          setRestaurantId(profile.id)
+        }
+      }
+      fetchRestaurantId()
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (!restaurantId) return
+
+    const socket = getSocket()
+
+    socket.emit("join_restaurant_room", restaurantId)
+
+    const handleNewOrder = (newOrder: Order) => {
+      console.log("Received new order:", newOrder)
+      setOrders((prevOrders) => [newOrder, ...prevOrders])
+      toast.success(`New Order #${newOrder.orderNumber} received!`)
+      // Play a notification sound
+      new Audio("/notification.mp3").play()
+    }
+
+    socket.on("new_order", handleNewOrder)
+
+    return () => {
+      socket.off("new_order", handleNewOrder)
+    }
+  }, [restaurantId])
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
-
     return () => clearInterval(timer)
   }, [])
 
@@ -129,7 +118,7 @@ export function LiveOrdersBoard() {
             >
               Accept
             </Button>
-            <Button size="sm" variant="destructive" onClick={() => updateOrderStatus(order.id, "delivered")}>
+            <Button size="sm" variant="destructive" onClick={() => setOrders(orders.filter((o) => o.id !== order.id))}>
               Reject
             </Button>
           </div>
@@ -196,7 +185,7 @@ export function LiveOrdersBoard() {
           <CardContent className="p-8 text-center">
             <CheckCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Orders</h3>
-            <p className="text-gray-500">All orders have been completed. New orders will appear here.</p>
+            <p className="text-gray-500">Waiting for new orders... They will appear here in real-time.</p>
           </CardContent>
         </Card>
       ) : (
@@ -207,7 +196,10 @@ export function LiveOrdersBoard() {
             const isOverdue = timeElapsed > order.estimatedTime
 
             return (
-              <Card key={order.id} className={`${isOverdue ? "border-red-200 bg-red-50" : ""}`}>
+              <Card
+                key={order.id}
+                className={`${isOverdue ? "border-red-200 bg-red-50" : ""} ${order.status === "new" ? "animate-pulse-fast border-blue-500" : ""}`}
+              >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{order.orderNumber}</CardTitle>
@@ -229,30 +221,13 @@ export function LiveOrdersBoard() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Customer Info */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <User className="w-4 h-4 text-gray-500" />
                       <span className="font-medium">{order.customerName}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm">{order.customerPhone}</span>
-                    </div>
-                    {order.deliveryType === "delivery" && (
-                      <div className="flex items-start gap-2">
-                        <MapPin className="w-4 h-4 text-gray-500 mt-0.5" />
-                        <span className="text-sm">{order.customerAddress}</span>
-                      </div>
-                    )}
-                    {order.deliveryType === "pickup" && (
-                      <Badge variant="outline" className="w-fit">
-                        Pickup Order
-                      </Badge>
-                    )}
                   </div>
 
-                  {/* Order Items */}
                   <div className="space-y-2">
                     <h4 className="font-medium text-sm">Order Items:</h4>
                     <div className="space-y-1">
@@ -267,13 +242,6 @@ export function LiveOrdersBoard() {
                     </div>
                   </div>
 
-                  {/* Payment Method */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Payment:</span>
-                    <Badge variant="outline">{order.paymentMethod}</Badge>
-                  </div>
-
-                  {/* Actions */}
                   <div className="pt-2">{getStatusActions(order)}</div>
                 </CardContent>
               </Card>
