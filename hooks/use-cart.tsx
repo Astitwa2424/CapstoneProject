@@ -1,15 +1,20 @@
 "use client"
 
-import { createContext, useContext, useReducer, type ReactNode } from "react"
+import type { MenuItem, Modification } from "@prisma/client"
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { toast } from "sonner"
 
-interface CartItem {
-  id: string
-  name: string
-  price: number
+// --- TYPES ---
+
+export interface CartItem {
+  id: string // Unique ID for the cart item instance
+  menuItem: MenuItem & {
+    restaurant: { id: string; name: string }
+  }
   quantity: number
+  selectedModifications: Modification[]
   specialInstructions?: string
-  restaurantId: string
-  image?: string | null
+  totalPrice: number
 }
 
 interface CartState {
@@ -17,138 +22,166 @@ interface CartState {
   restaurantId: string | null
 }
 
-type CartAction =
-  | { type: "ADD_ITEM"; payload: CartItem }
-  | { type: "REMOVE_ITEM"; payload: string }
-  | { type: "UPDATE_QUANTITY"; payload: { id: string; quantity: number } }
-  | { type: "CLEAR_CART" }
-
-const CartContext = createContext<{
-  state: CartState
-  addToCart: (item: CartItem) => void
-  removeFromCart: (id: string) => void
-  updateQuantity: (id: string, quantity: number) => void
-  clearCart: () => void
-  getTotal: () => number
-  getItemCount: () => number
-} | null>(null)
-
-function cartReducer(state: CartState, action: CartAction): CartState {
-  switch (action.type) {
-    case "ADD_ITEM": {
-      const newItem = action.payload
-
-      // If cart has items from different restaurant, clear it first
-      if (state.restaurantId && state.restaurantId !== newItem.restaurantId) {
-        return {
-          items: [newItem],
-          restaurantId: newItem.restaurantId,
-        }
-      }
-
-      // Check if item already exists (same id and instructions)
-      const existingItemIndex = state.items.findIndex(
-        (item) => item.id === newItem.id && item.specialInstructions === newItem.specialInstructions,
-      )
-
-      if (existingItemIndex >= 0) {
-        // Update quantity of existing item
-        const updatedItems = [...state.items]
-        updatedItems[existingItemIndex].quantity += newItem.quantity
-        return {
-          ...state,
-          items: updatedItems,
-        }
-      } else {
-        // Add new item
-        return {
-          items: [...state.items, newItem],
-          restaurantId: newItem.restaurantId,
-        }
-      }
-    }
-
-    case "REMOVE_ITEM":
-      return {
-        ...state,
-        items: state.items.filter((item) => item.id !== action.payload),
-      }
-
-    case "UPDATE_QUANTITY": {
-      const { id, quantity } = action.payload
-      if (quantity <= 0) {
-        return {
-          ...state,
-          items: state.items.filter((item) => item.id !== id),
-        }
-      }
-      return {
-        ...state,
-        items: state.items.map((item) => (item.id === id ? { ...item, quantity } : item)),
-      }
-    }
-
-    case "CLEAR_CART":
-      return {
-        items: [],
-        restaurantId: null,
-      }
-
-    default:
-      return state
-  }
+interface CartTotals {
+  subtotal: number
+  deliveryFee: number
+  serviceFee: number
+  total: number
 }
+
+interface CartContextType {
+  items: CartItem[]
+  restaurantId: string | null
+  addToCart: (item: Omit<CartItem, "id" | "totalPrice">) => void
+  removeFromCart: (cartItemId: string) => void
+  updateQuantity: (cartItemId: string, quantity: number) => void
+  clearCart: () => void
+  getItemCount: () => number
+  getCartSubtotal: () => number
+  getCartTotals: () => CartTotals
+}
+
+// --- CONTEXT ---
+
+const CartContext = createContext<CartContextType | undefined>(undefined)
+
+// --- PROVIDER ---
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(cartReducer, {
-    items: [],
-    restaurantId: null,
-  })
+  const [cartState, setCartState] = useState<CartState>({ items: [], restaurantId: null })
 
-  const addToCart = (item: CartItem) => {
-    dispatch({ type: "ADD_ITEM", payload: item })
+  useEffect(() => {
+    try {
+      const storedCart = localStorage.getItem("foodhub-cart-simplified")
+      if (storedCart) {
+        setCartState(JSON.parse(storedCart))
+      }
+    } catch (error) {
+      console.error("Failed to parse cart from localStorage", error)
+      localStorage.removeItem("foodhub-cart-simplified")
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem("foodhub-cart-simplified", JSON.stringify(cartState))
+  }, [cartState])
+
+  const calculateItemPrice = (basePrice: number, selectedMods: Modification[]): number => {
+    return selectedMods.reduce((total, mod) => total + (mod.cost || 0), basePrice)
   }
 
-  const removeFromCart = (id: string) => {
-    dispatch({ type: "REMOVE_ITEM", payload: id })
+  const addToCart: CartContextType["addToCart"] = (newItem) => {
+    const newRestaurantId = newItem.menuItem.restaurant.id
+
+    if (cartState.restaurantId && cartState.restaurantId !== newRestaurantId) {
+      toast.error("You can only order from one restaurant at a time.", {
+        description: "Please clear your cart to add items from this restaurant.",
+        action: {
+          label: "Clear Cart",
+          onClick: () => clearAndAddItem(newItem),
+        },
+      })
+      return
+    }
+
+    const itemPrice = calculateItemPrice(newItem.menuItem.price, newItem.selectedModifications)
+    const itemToAdd: CartItem = {
+      ...newItem,
+      id: crypto.randomUUID(),
+      totalPrice: itemPrice * newItem.quantity,
+    }
+
+    setCartState((prevState) => ({
+      items: [...prevState.items, itemToAdd],
+      restaurantId: newRestaurantId,
+    }))
+
+    toast.success(`${newItem.menuItem.name} added to cart!`)
   }
 
-  const updateQuantity = (id: string, quantity: number) => {
-    dispatch({ type: "UPDATE_QUANTITY", payload: { id, quantity } })
+  const clearAndAddItem = (item: Omit<CartItem, "id" | "totalPrice">) => {
+    const itemPrice = calculateItemPrice(item.menuItem.price, item.selectedModifications)
+    const itemToAdd: CartItem = {
+      ...item,
+      id: crypto.randomUUID(),
+      totalPrice: itemPrice * item.quantity,
+    }
+    setCartState({
+      items: [itemToAdd],
+      restaurantId: item.menuItem.restaurant.id,
+    })
+    toast.success(`Cart cleared and ${item.menuItem.name} added!`)
   }
 
-  const clearCart = () => {
-    dispatch({ type: "CLEAR_CART" })
+  const removeFromCart: CartContextType["removeFromCart"] = (cartItemId) => {
+    setCartState((prevState) => {
+      const newItems = prevState.items.filter((item) => item.id !== cartItemId)
+      return {
+        items: newItems,
+        restaurantId: newItems.length > 0 ? prevState.restaurantId : null,
+      }
+    })
+    toast.info("Item removed from cart.")
   }
 
-  const getTotal = () => {
-    return state.items.reduce((total, item) => total + item.price * item.quantity, 0)
+  const updateQuantity: CartContextType["updateQuantity"] = (cartItemId, quantity) => {
+    if (quantity <= 0) {
+      removeFromCart(cartItemId)
+      return
+    }
+    setCartState((prevState) => ({
+      ...prevState,
+      items: prevState.items.map((item) => {
+        if (item.id === cartItemId) {
+          const baseItemPrice = item.totalPrice / item.quantity
+          return { ...item, quantity, totalPrice: baseItemPrice * quantity }
+        }
+        return item
+      }),
+    }))
   }
 
-  const getItemCount = () => {
-    return state.items.reduce((count, item) => count + item.quantity, 0)
+  const clearCart: CartContextType["clearCart"] = () => {
+    setCartState({ items: [], restaurantId: null })
+    toast.info("Cart has been cleared.")
   }
 
-  return (
-    <CartContext.Provider
-      value={{
-        state,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        getTotal,
-        getItemCount,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
-  )
+  const getItemCount: CartContextType["getItemCount"] = () => {
+    return cartState.items.reduce((total, item) => total + item.quantity, 0)
+  }
+
+  const getCartSubtotal: CartContextType["getCartSubtotal"] = () => {
+    return cartState.items.reduce((total, item) => total + item.totalPrice, 0)
+  }
+
+  const getCartTotals: CartContextType["getCartTotals"] = () => {
+    const subtotal = getCartSubtotal()
+    const deliveryFee = subtotal > 0 ? 5.99 : 0
+    const serviceFee = subtotal > 0 ? 2.99 : 0
+    const total = subtotal + deliveryFee + serviceFee
+    return { subtotal, deliveryFee, serviceFee, total }
+  }
+
+  const value = {
+    items: cartState.items,
+    restaurantId: cartState.restaurantId,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    getItemCount,
+    getCartSubtotal,
+    getCartTotals,
+  }
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }
 
-export function useCart() {
+// --- HOOK ---
+
+export const useCart = (): CartContextType => {
   const context = useContext(CartContext)
-  if (!context) {
+  if (context === undefined) {
     throw new Error("useCart must be used within a CartProvider")
   }
   return context

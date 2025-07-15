@@ -1,13 +1,21 @@
 import { PrismaClient } from "@prisma/client"
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+// This setup prevents creating too many Prisma Client instances in development
+// due to Next.js hot-reloading, which can exhaust your database connection pool.
+
+const prismaClientSingleton = () => {
+  return new PrismaClient()
 }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ["query"],
-  })
+declare global {
+  // This allows us to store the prisma client on the global object in development
+  var prismaGlobal: undefined | ReturnType<typeof prismaClientSingleton>
+}
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
+
+export { prisma }
+
+if (process.env.NODE_ENV !== "production") {
+  globalThis.prismaGlobal = prisma
+}

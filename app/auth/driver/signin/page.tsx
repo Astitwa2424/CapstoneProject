@@ -5,14 +5,13 @@ import { AuthForm } from "@/components/auth/auth-form"
 export default async function DriverSignInPage() {
   const session = await auth()
 
-  // If user is already signed in, redirect to appropriate dashboard
   if (session?.user) {
     const userRole = session.user.role.toLowerCase()
     redirect(`/${userRole}/dashboard`)
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-yellow-50 to-orange-50 py-12 px-4 sm:px-6 lg:px-8">
       <AuthForm userType="driver" />
     </div>
   )

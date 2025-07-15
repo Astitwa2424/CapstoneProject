@@ -1,18 +1,11 @@
-"use client"
+import type { ReactNode } from "react"
+import DashboardHeader from "@/components/customer/dashboard-header"
 
-import type React from "react"
-
-import { CartProvider } from "@/hooks/use-cart"
-import { SessionProvider } from "next-auth/react"
-import { Toaster } from "sonner"
-
-export default function CustomerLayout({ children }: { children: React.ReactNode }) {
+export default function CustomerLayout({ children }: { children: ReactNode }) {
   return (
-    <SessionProvider>
-      <CartProvider>
-        {children}
-        <Toaster richColors />
-      </CartProvider>
-    </SessionProvider>
+    <div className="min-h-screen bg-gray-50">
+      <DashboardHeader />
+      <main>{children}</main>
+    </div>
   )
 }

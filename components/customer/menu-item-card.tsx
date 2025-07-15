@@ -1,76 +1,55 @@
 "use client"
 
-import { Card, CardContent } from "@/components/ui/card"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { useCart } from "@/hooks/use-cart"
-import { toast } from "sonner"
-import type { MenuItem } from "@prisma/client"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { PlusIcon } from "lucide-react"
+import type { MenuItem, RestaurantProfile, Modification } from "@prisma/client"
+import { MenuItemModal } from "./menu-item-modal"
+import { useState } from "react"
 
-interface MenuItemCardProps {
-  item: MenuItem
-  restaurantId: string
+// Extend MenuItem type to include modifications
+type MenuItemWithModifications = MenuItem & {
+  modifications: Modification[]
 }
 
-export function MenuItemCard({ item, restaurantId }: MenuItemCardProps) {
-  const { addItem } = useCart()
+interface MenuItemCardProps {
+  item: MenuItemWithModifications
+  restaurant: RestaurantProfile
+}
 
-  const handleAddToCart = () => {
-    addItem({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      quantity: 1,
-      restaurantId: restaurantId,
-    })
-    toast.success(`${item.name} added to cart`)
-  }
+// Using DEFAULT export here to fix the import/export mismatch.
+export default function MenuItemCard({ item, restaurant }: MenuItemCardProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="font-semibold text-lg">{item.name}</h3>
-              {item.isVegetarian && (
-                <Badge variant="secondary" className="text-xs">
-                  Vegetarian
-                </Badge>
-              )}
-              {item.isVegan && (
-                <Badge variant="secondary" className="text-xs">
-                  Vegan
-                </Badge>
-              )}
-              {item.isGlutenFree && (
-                <Badge variant="secondary" className="text-xs">
-                  Gluten Free
-                </Badge>
-              )}
-            </div>
-
-            {item.description && <p className="text-gray-600 text-sm mb-3">{item.description}</p>}
-
-            <div className="flex items-center justify-between">
-              <span className="text-xl font-bold text-green-600">${item.price.toFixed(2)}</span>
-              <Button onClick={handleAddToCart} size="sm">
-                Add to Cart
-              </Button>
-            </div>
-          </div>
-
-          {item.image && (
-            <div className="ml-4">
-              <img
-                src={item.image || "/placeholder.svg"}
-                alt={item.name}
-                className="w-20 h-20 object-cover rounded-lg"
-              />
-            </div>
-          )}
+    <>
+      <Card className="flex cursor-pointer flex-col overflow-hidden group" onClick={() => setIsModalOpen(true)}>
+        <div className="relative h-40 w-full">
+          <Image
+            src={item.image || "/placeholder.svg?height=160&width=300&query=Food+Item"}
+            alt={item.name}
+            fill
+            style={{ objectFit: "cover" }}
+            className="transition-transform duration-300 group-hover:scale-105"
+          />
         </div>
-      </CardContent>
-    </Card>
+        <CardHeader className="flex-1 p-4">
+          <CardTitle className="text-lg">{item.name}</CardTitle>
+          <CardDescription className="line-clamp-2 text-sm">
+            {item.description || "No description available."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between p-4 pt-0">
+          <span className="text-lg font-bold">${item.price.toFixed(2)}</span>
+          <Button size="icon" className="rounded-full">
+            <PlusIcon className="h-5 w-5" />
+            <span className="sr-only">Add to cart</span>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <MenuItemModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} item={item} restaurant={restaurant} />
+    </>
   )
 }

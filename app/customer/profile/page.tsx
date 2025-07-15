@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { ProfileInformation } from "@/components/customer/profile-information"
 import { RecentOrders } from "@/components/customer/recent-orders"
-import { PaymentMethods } from "@/components/customer/payment-methods"
 import { SavedAddresses } from "@/components/customer/saved-addresses"
 import { redirect } from "next/navigation"
 import type { User, CustomerProfile } from "@prisma/client"
@@ -46,6 +45,18 @@ async function getRecentOrders(userId: string) {
   return orders
 }
 
+async function getPaymentMethods(userId: string) {
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId: userId },
+    include: {
+      paymentMethods: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  })
+  return customerProfile?.paymentMethods || []
+}
+
 export default async function CustomerProfilePage() {
   const session = await auth()
 
@@ -53,10 +64,11 @@ export default async function CustomerProfilePage() {
     redirect("/auth/signin")
   }
 
-  // Fetch user and orders in parallel for better performance
-  const [userProfile, recentOrders] = await Promise.all([
+  // Fetch user, orders, and payment methods in parallel for better performance
+  const [userProfile, recentOrders, paymentMethods] = await Promise.all([
     getUserProfile(session.user.id),
     getRecentOrders(session.user.id),
+    getPaymentMethods(session.user.id),
   ])
 
   if (!userProfile) {
@@ -67,7 +79,31 @@ export default async function CustomerProfilePage() {
     <div className="space-y-8">
       <ProfileInformation user={userProfile} />
       <RecentOrders orders={recentOrders} />
-      <PaymentMethods />
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4">Payment Methods</h2>
+        {paymentMethods.length > 0 ? (
+          <div className="space-y-3">
+            {paymentMethods.map((method) => (
+              <div key={method.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-5 bg-blue-600 rounded text-white text-xs flex items-center justify-center font-bold">
+                    {method.type.toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="font-medium">•••• {method.last4}</div>
+                    <div className="text-sm text-gray-500">{method.cardHolder}</div>
+                  </div>
+                </div>
+                <div className="text-sm text-gray-500">
+                  {method.expiryMonth}/{method.expiryYear.slice(-2)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">No payment methods saved.</p>
+        )}
+      </div>
       <SavedAddresses />
     </div>
   )

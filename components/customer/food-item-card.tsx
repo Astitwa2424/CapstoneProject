@@ -1,85 +1,77 @@
-"use client"
-
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus } from "lucide-react"
-import { useCart } from "@/hooks/use-cart"
-import { toast } from "sonner"
+import { Star, Clock, Leaf } from "lucide-react"
+import Image from "next/image"
 
-interface MenuItem {
+interface FoodItem {
   id: string
   name: string
   description: string | null
-  image: string | null
   price: number
+  image?: string | null
   category: string | null
-  isVegetarian: boolean
-  isVegan: boolean
-  isGlutenFree: boolean
-  restaurant: {
-    id: string
+  isVegetarian?: boolean
+  isVegan?: boolean
+  spicyLevel?: number
+  restaurantId: string
+  restaurant?: {
     name: string
+    rating: number
+    deliveryFee: number
   }
 }
 
 interface FoodItemCardProps {
-  item: MenuItem
+  item: FoodItem
 }
 
 export function FoodItemCard({ item }: FoodItemCardProps) {
-  const { addItem } = useCart()
-
-  const handleAddToCart = () => {
-    addItem({
-      id: item.id,
-      name: item.name,
-      price: item.price,
-      image: item.image,
-      restaurantId: item.restaurant.id,
-      restaurantName: item.restaurant.name,
-      quantity: 1,
-      specialInstructions: "",
-    })
-    toast.success(`${item.name} added to cart!`)
-  }
-
   return (
-    <Card className="group cursor-pointer hover:shadow-md transition-all duration-200">
-      <div className="relative">
-        <img
-          src={item.image || "/placeholder.svg?height=150&width=300&query=food"}
+    <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
+      <div className="relative h-48">
+        <Image
+          src={item.image || `/placeholder.svg?height=200&width=300&text=${encodeURIComponent(item.name)}`}
           alt={item.name}
-          className="w-full h-32 object-cover rounded-t-lg"
+          fill
+          className="object-cover"
         />
-        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-          {item.isVegetarian && (
-            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-              Vegetarian
-            </Badge>
-          )}
-          {item.isVegan && (
-            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-              Vegan
-            </Badge>
-          )}
-          {item.isGlutenFree && (
-            <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-              Gluten Free
-            </Badge>
-          )}
-        </div>
+        {item.isVegetarian && (
+          <Badge className="absolute top-2 left-2 bg-green-500">
+            <Leaf className="w-3 h-3 mr-1" />
+            Veg
+          </Badge>
+        )}
+        {item.spicyLevel && item.spicyLevel > 0 && (
+          <Badge className="absolute top-2 right-2 bg-red-500">{"🌶️".repeat(item.spicyLevel)}</Badge>
+        )}
       </div>
       <CardContent className="p-4">
-        <h3 className="font-semibold text-gray-900 mb-1">{item.name}</h3>
-        <p className="text-sm text-gray-600 mb-2">{item.restaurant.name}</p>
-        <div className="flex items-center justify-between">
-          <span className="text-lg font-bold text-gray-900">${item.price.toFixed(2)}</span>
-          <Button onClick={handleAddToCart} size="sm" className="bg-red-600 hover:bg-red-700 text-white">
-            <Plus className="w-4 h-4 mr-1" />
-            Add to Cart
-          </Button>
+        <div className="flex justify-between items-start mb-2">
+          <h3 className="font-semibold text-lg line-clamp-1">{item.name}</h3>
+          <span className="font-bold text-lg text-green-600">${item.price.toFixed(2)}</span>
         </div>
+
+        {item.description && <p className="text-gray-600 text-sm mb-3 line-clamp-2">{item.description}</p>}
+
+        {item.restaurant && (
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <div className="flex items-center">
+              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400 mr-1" />
+              <span>{item.restaurant.rating.toFixed(1)}</span>
+            </div>
+            <div className="flex items-center">
+              <Clock className="w-4 h-4 mr-1" />
+              <span>25-35 min</span>
+            </div>
+            <span>${item.restaurant.deliveryFee.toFixed(2)} delivery</span>
+          </div>
+        )}
+
+        {item.category && (
+          <Badge variant="outline" className="mt-2">
+            {item.category}
+          </Badge>
+        )}
       </CardContent>
     </Card>
   )

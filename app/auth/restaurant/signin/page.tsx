@@ -5,7 +5,6 @@ import { AuthForm } from "@/components/auth/auth-form"
 export default async function RestaurantSignInPage() {
   const session = await auth()
 
-  // If user is already signed in, redirect to appropriate dashboard
   if (session?.user) {
     const userRole = session.user.role.toLowerCase()
     redirect(`/${userRole}/dashboard`)

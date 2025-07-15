@@ -6,7 +6,6 @@ import { UserRole } from "@prisma/client"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log("📝 Signup request received for:", body.email)
 
     const {
       email,
@@ -14,145 +13,108 @@ export async function POST(request: NextRequest) {
       firstName,
       lastName,
       phone,
-      address,
-      city,
-      state,
-      zipCode,
       userType,
-      // Driver specific fields
-      licenseNumber,
-      vehicleType,
-      vehicleModel,
-      vehicleYear,
-      plateNumber,
-      insuranceProvider,
       // Restaurant specific fields
       restaurantName,
-      businessType,
       cuisine,
       description,
-      businessLicense,
-      taxId,
+      streetAddress,
+      suburb,
+      state,
+      postcode,
+      abn,
+      operatingHours,
+      bankName,
+      bankAccountNumber,
+      website,
+      facebookUrl,
+      instagramUrl,
     } = body
 
-    // Validate required fields
-    if (!email || !password || !firstName || !lastName) {
-      console.log("❌ Missing required fields")
+    // --- Validation ---
+    if (!email || !password || !firstName || !lastName || !userType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    })
-
+    const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
-      console.log("❌ User already exists:", email)
-      return NextResponse.json({ error: "User already exists" }, { status: 400 })
+      return NextResponse.json({ error: "User with this email already exists" }, { status: 409 })
     }
 
-    // Hash password
-    console.log("🔐 Hashing password...")
+    // --- User Creation ---
     const hashedPassword = await bcrypt.hash(password, 12)
+    const role: UserRole = userType.toUpperCase() as UserRole
 
-    // Determine user role
-    let role: UserRole
-    switch (userType) {
-      case "driver":
-        role = UserRole.DRIVER
-        break
-      case "restaurant":
-        role = UserRole.RESTAURANT
-        break
-      default:
-        role = UserRole.CUSTOMER
+    if (!Object.values(UserRole).includes(role)) {
+      return NextResponse.json({ error: "Invalid user type" }, { status: 400 })
     }
 
-    console.log("👤 Creating user with role:", role)
-
-    // Create user with transaction to ensure data consistency
     const result = await prisma.$transaction(async (tx) => {
-      // Create the main user
       const user = await tx.user.create({
         data: {
           email,
-          password: hashedPassword, // Make sure to save the hashed password
+          password: hashedPassword,
           name: `${firstName} ${lastName}`,
           role,
-          phone,
-          address: `${address}, ${city}, ${state} ${zipCode}`,
         },
       })
 
-      console.log("✅ User created:", user.id)
+      // --- Profile Creation ---
+      if (role === UserRole.RESTAURANT) {
+        if (!restaurantName || !streetAddress || !suburb || !state || !postcode || !abn) {
+          throw new Error("Missing required fields for restaurant profile.")
+        }
+        const fullAddress = `${streetAddress}, ${suburb}, ${state} ${postcode}, Australia`
 
-      // Create role-specific profile
-      if (role === UserRole.CUSTOMER) {
+        await tx.restaurantProfile.create({
+          data: {
+            userId: user.id,
+            name: restaurantName,
+            description: description || null,
+            address: fullAddress,
+            phone: phone || null,
+            cuisine: cuisine || null,
+            businessRegistrationNumber: abn,
+            streetAddress,
+            city: suburb,
+            state,
+            postalCode: postcode,
+            country: "Australia",
+            operatingHours: operatingHours || null,
+            bankName: bankName || null,
+            
+            bankAccountNumber: bankAccountNumber || null,
+            website: website || null,
+            facebookUrl: facebookUrl || null,
+            instagramUrl: instagramUrl || null,
+          },
+        })
+      } else if (role === UserRole.CUSTOMER) {
         await tx.customerProfile.create({
           data: {
             userId: user.id,
-            deliveryAddress: `${address}, ${city}, ${state} ${zipCode}`,
-            paymentMethods: {},
+            phone: phone || null,
+            address: body.address || null,
           },
         })
-        console.log("✅ Customer profile created")
       } else if (role === UserRole.DRIVER) {
         await tx.driverProfile.create({
           data: {
             userId: user.id,
-            licenseNumber: licenseNumber || "PENDING",
-            vehicleType: vehicleType ? (vehicleType.toUpperCase() as VehicleType) : VehicleType.CAR,
-            vehicleModel: vehicleModel || "PENDING",
-            plateNumber: plateNumber || "PENDING",
-            isAvailable: false,
-            rating: 0.0,
-            totalDeliveries: 0,
           },
         })
-        console.log("✅ Driver profile created")
-      } else if (role === UserRole.RESTAURANT) {
-        await tx.restaurantProfile.create({
-          data: {
-            userId: user.id,
-            name: restaurantName || `${firstName}'s Restaurant`,
-            description: description || "",
-            address: `${address}, ${city}, ${state} ${zipCode}`,
-            phone,
-            cuisine: cuisine ? [cuisine] : [],
-            isOpen: false,
-            rating: 0.0,
-            deliveryFee: 0.0,
-            minOrder: 0.0,
-          },
-        })
-        console.log("✅ Restaurant profile created")
       }
 
       return user
     })
 
-    console.log("🎉 Signup successful for:", result.email)
-
-    // Return success response without sensitive data
     return NextResponse.json({
       success: true,
-      user: {
-        id: result.id,
-        email: result.email,
-        name: result.name,
-        role: result.role,
-      },
+      user: { id: result.id, email: result.email, name: result.name, role: result.role },
     })
   } catch (error) {
     console.error("💥 Signup error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : "An internal server error occurred."
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
-}
-
-// Define VehicleType enum to match Prisma schema
-enum VehicleType {
-  BIKE = "BIKE",
-  CAR = "CAR",
-  SCOOTER = "SCOOTER",
-  MOTORCYCLE = "MOTORCYCLE",
 }

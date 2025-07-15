@@ -1,12 +1,18 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { DashboardHeader } from "@/components/customer/dashboard-header"
+import DashboardHeader from "@/components/customer/dashboard-header" // Corrected: Default import
 import { RestaurantCard } from "@/components/customer/restaurant-card"
 import { FoodItemCard } from "@/components/customer/food-item-card"
 import { Button } from "@/components/ui/button"
 import { redirect } from "next/navigation"
+import type { RestaurantProfile, MenuItem } from "@prisma/client"
 
-async function getRestaurants() {
+// Define a more specific type for what the component expects
+type RestaurantWithMenuItems = RestaurantProfile & {
+  menuItems: MenuItem[]
+}
+
+async function getRestaurants(): Promise<RestaurantWithMenuItems[]> {
   const restaurants = await prisma.restaurantProfile.findMany({
     include: {
       menuItems: {

@@ -11,7 +11,7 @@ interface Restaurant {
   image: string | null
   cuisine: string | null
   rating: number | null
-  deliveryTime: string | null
+  deliveryTime?: string | null // Made optional
   deliveryFee: number | null
   isOpen: boolean
 }

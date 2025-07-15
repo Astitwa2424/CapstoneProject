@@ -132,7 +132,7 @@ export function DashboardSidebar() {
           <Button
             variant="ghost"
             onClick={handleSignOut}
-            className={`w-full justify-start text-gray-600 hover:text-gray-900 hover:bg-gray-50 ${
+            className={`w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 ${
               collapsed ? "px-2" : ""
             }`}
           >

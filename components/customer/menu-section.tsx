@@ -1,28 +1,39 @@
 "use client"
 
-import { MenuItemCard } from "@/components/customer/menu-item-card"
-import type { MenuItem } from "@prisma/client"
+import MenuItemCard from "@/components/customer/menu-item-card"
+import { Separator } from "@/components/ui/separator"
+import type { MenuItem, RestaurantProfile, Modification } from "@prisma/client"
+
+type MenuItemWithModifications = MenuItem & {
+  modifications: Modification[]
+}
+
+type RestaurantWithMenuItems = RestaurantProfile & {
+  menuItems: MenuItemWithModifications[]
+}
 
 interface MenuSectionProps {
   category: string
-  items: MenuItem[]
-  restaurantId: string
+  items: MenuItemWithModifications[]
+  restaurant: RestaurantWithMenuItems
 }
 
-export function MenuSection({ category, items = [], restaurantId }: MenuSectionProps) {
-  // Safety check - if no items, don't render anything
-  if (!items || items.length === 0) {
+export function MenuSection({ category, items, restaurant }: MenuSectionProps) {
+  if (items.length === 0) {
     return null
   }
 
   return (
-    <section className="mb-8">
-      <h2 className="text-2xl font-bold mb-4">{category}</h2>
-      <div className="space-y-4">
+    <div id={category.toLowerCase().replace(/\s+/g, "-")} className="scroll-mt-20">
+      <div className="my-6">
+        <h3 className="text-xl font-semibold tracking-tight">{category}</h3>
+        <Separator className="mt-2" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {items.map((item) => (
-          <MenuItemCard key={item.id} item={item} restaurantId={restaurantId} />
+          <MenuItemCard key={item.id} item={item} restaurant={restaurant} />
         ))}
       </div>
-    </section>
+    </div>
   )
 }
