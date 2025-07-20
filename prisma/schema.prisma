@@ -109,12 +109,15 @@ model DriverProfile {
   vehicleModel    String?  @map("vehicle_model")
   plateNumber     String?  @map("plate_number")
   isAvailable     Boolean  @default(false) @map("is_available")
+  latitude        Float?
+  longitude       Float?
   rating          Float    @default(0.0)
   totalDeliveries Int      @default(0) @map("total_deliveries")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
 
   @@map("driver_profiles")
 }
@@ -148,6 +151,7 @@ model RestaurantProfile {
   mapLatitude                Float?   @map("map_latitude")
   mapLongitude               Float?   @map("map_longitude")
   isActive                   Boolean  @default(true)
+  bannerImage                String?  @map("banner_image")
   createdAt                  DateTime @default(now()) @map("created_at")
   updatedAt                  DateTime @updatedAt @map("updated_at")
 
@@ -174,6 +178,7 @@ model MenuItem {
   restaurantId  String         @map("restaurant_id")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
+
   restaurant    RestaurantProfile @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orderItems    OrderItem[]
   modifications Modification[]
@@ -188,6 +193,7 @@ model Modification {
   menuItemId String   @map("menu_item_id")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
   @@map("modifications")
@@ -197,6 +203,7 @@ model Order {
   id                    String      @id @default(cuid())
   customerProfileId     String      @map("customer_profile_id")
   restaurantId          String      @map("restaurant_id")
+  driverProfileId       String?     @map("driver_profile_id")
   total                 Float
   subtotal              Float
   deliveryFee           Float
@@ -208,9 +215,11 @@ model Order {
   paymentStatus         String      @default("PENDING") @map("payment_status")
   createdAt             DateTime    @default(now()) @map("created_at")
   updatedAt             DateTime    @updatedAt @map("updated_at")
-  customerProfile       CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  restaurant            RestaurantProfile @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  paymentMethod         PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  customerProfile       CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  restaurant            RestaurantProfile  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  driverProfile         DriverProfile?     @relation(fields: [driverProfileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  paymentMethod         PaymentMethod?     @relation(fields: [paymentMethodId], references: [id], onUpdate: NoAction, onDelete: NoAction)
   orderItems            OrderItem[]
 
   @@map("orders")
@@ -223,9 +232,10 @@ model OrderItem {
   quantity              Int
   price                 Float
   specialInstructions   String?  @map("special_instructions")
-  selectedModifications Json?    @map("selected_modifications")
+  selectedModifications Json?   @map("selected_modifications")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
+
   order                 Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem              MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 
@@ -233,18 +243,19 @@ model OrderItem {
 }
 
 model PaymentMethod {
-  id                    String   @id @default(cuid())
-  customerProfileId     String   @map("customer_profile_id")
-  type                  String
-  last4                 String
-  cardHolder            String   @map("card_holder")
-  expiryMonth           String
-  expiryYear            String
-  isDefault             Boolean  @default(false) @map("is_default")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
-  customerProfile       CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
-  orders                Order[]
+  id                String   @id @default(cuid())
+  customerProfileId String   @map("customer_profile_id")
+  type              String
+  last4             String
+  cardHolder        String   @map("card_holder")
+  expiryMonth       String
+  expiryYear        String
+  isDefault         Boolean  @default(false) @map("is_default")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  orders            Order[]
 
   @@map("payment_methods")
 }

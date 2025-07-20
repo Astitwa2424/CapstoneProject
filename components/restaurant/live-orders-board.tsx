@@ -1,247 +1,235 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { Clock, MapPin, User, ChefHat, CheckCircle, XCircle } from "lucide-react"
-import { io } from "socket.io-client"
-import { toast } from "sonner"
+import { Clock, MapPin, User } from "lucide-react"
+import { getSocket } from "@/lib/socket"
 import { updateOrderStatus } from "@/app/restaurant/actions"
 import type { OrderStatus } from "@prisma/client"
+import { toast } from "sonner"
 
-export interface LiveOrder {
+interface OrderItem {
+  name: string
+  quantity: number
+  price: number
+}
+
+interface Order {
   id: string
   orderNumber: string
   customerName: string
-  items: Array<{
-    name: string
-    quantity: number
-    price: number
-    modifications?: Array<{ label: string; cost: number }>
-  }>
+  items: OrderItem[]
   total: number
   status: OrderStatus
   orderTime: string
   estimatedTime: number
   deliveryType: "delivery" | "pickup"
-  deliveryAddress?: string | null
+  deliveryAddress?: string
 }
 
 interface LiveOrdersBoardProps {
+  initialOrders: Order[]
   restaurantId: string
-  initialOrders: LiveOrder[]
 }
 
-export function LiveOrdersBoard({ restaurantId, initialOrders }: LiveOrdersBoardProps) {
-  const [orders, setOrders] = useState<LiveOrder[]>(initialOrders)
-  const [isConnected, setIsConnected] = useState(false)
+export function LiveOrdersBoard({ initialOrders, restaurantId }: LiveOrdersBoardProps) {
+  const [orders, setOrders] = useState<Order[]>(initialOrders)
+  const [isPending, startTransition] = useTransition()
+  const [processingOrders, setProcessingOrders] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    setOrders(initialOrders)
+    const socket = getSocket()
 
-    const socketInstance = io(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000", {
-      path: "/api/socket.io",
-      addTrailingSlash: false,
-      reconnection: true,
-      reconnectionAttempts: 5,
-    })
+    socket.emit("join-restaurant-room", restaurantId)
 
-    socketInstance.on("connect", () => {
-      console.log("Socket connected:", socketInstance.id)
-      setIsConnected(true)
-      socketInstance.emit("join-restaurant-room", restaurantId)
-    })
-
-    socketInstance.on("disconnect", () => {
-      console.log("Socket disconnected")
-      setIsConnected(false)
-    })
-
-    socketInstance.on("connect_error", (err) => {
-      console.error("Socket connection error:", err.message)
-      toast.error("Failed to connect to live order service.")
-    })
-
-    socketInstance.on("new_order", (newOrderData) => {
-      console.log("Received new order via socket:", newOrderData)
-      const newOrder: LiveOrder = newOrderData.order
-
+    socket.on("order_status_update", (updatedOrder: Order) => {
       setOrders((prevOrders) => {
-        if (prevOrders.some((order) => order.id === newOrder.id)) {
-          return prevOrders
+        const orderIndex = prevOrders.findIndex((order) => order.id === updatedOrder.id)
+        if (orderIndex !== -1) {
+          const newOrders = [...prevOrders]
+          newOrders[orderIndex] = updatedOrder
+          return newOrders
         }
-        toast.success(`New Order #${newOrder.orderNumber} from ${newOrder.customerName}!`)
-        return [newOrder, ...prevOrders]
+        return prevOrders
       })
     })
 
-    socketInstance.on("order_status_update", (updatedOrder: LiveOrder) => {
-      console.log("Received order status update:", updatedOrder)
-      setOrders((prevOrders) => prevOrders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)))
-      toast.info(`Order #${updatedOrder.orderNumber} status updated to ${updatedOrder.status}`)
+    socket.on("new_order", (newOrder: Order) => {
+      setOrders((prevOrders) => [newOrder, ...prevOrders])
+      toast.success(`New order received: ${newOrder.orderNumber}`)
     })
 
     return () => {
-      console.log("Disconnecting socket...")
-      socketInstance.disconnect()
+      socket.off("order_status_update")
+      socket.off("new_order")
     }
-  }, [restaurantId, initialOrders])
+  }, [restaurantId])
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price)
-  }
+  const handleStatusUpdate = async (orderId: string, newStatus: OrderStatus) => {
+    setProcessingOrders((prev) => new Set(prev).add(orderId))
 
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-  }
-
-  const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
-    const originalOrders = [...orders]
-    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)))
-
-    const result = await updateOrderStatus(orderId, status)
-
-    if (result.success) {
-      toast.success(`Order status updated to ${status}`)
-    } else {
-      toast.error(`Failed to update order: ${result.error}`)
-      setOrders(originalOrders)
-    }
+    startTransition(async () => {
+      try {
+        const result = await updateOrderStatus(orderId, newStatus)
+        if (result.success) {
+          toast.success(`Order status updated to ${newStatus.toLowerCase()}`)
+        } else {
+          toast.error(result.error || "Failed to update order status")
+        }
+      } catch (error) {
+        toast.error("Failed to update order status")
+        console.error("Error updating order status:", error)
+      } finally {
+        setProcessingOrders((prev) => {
+          const newSet = new Set(prev)
+          newSet.delete(orderId)
+          return newSet
+        })
+      }
+    })
   }
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
       case "PENDING":
-        return "bg-yellow-100 text-yellow-800 border-yellow-400"
+        return "bg-yellow-100 text-yellow-800"
+      case "NEW":
+        return "bg-blue-100 text-blue-800"
       case "ACCEPTED":
-        return "bg-blue-100 text-blue-800 border-blue-400"
+        return "bg-green-100 text-green-800"
       case "PREPARING":
-        return "bg-indigo-100 text-indigo-800 border-indigo-400"
-      case "READY":
-        return "bg-purple-100 text-purple-800 border-purple-400"
+        return "bg-orange-100 text-orange-800"
+      case "READY_FOR_PICKUP":
+        return "bg-purple-100 text-purple-800"
       case "OUT_FOR_DELIVERY":
-        return "bg-cyan-100 text-cyan-800 border-cyan-400"
-      case "DELIVERED":
-        return "bg-green-100 text-green-800 border-green-400"
-      case "CANCELLED":
-        return "bg-red-100 text-red-800 border-red-400"
+        return "bg-indigo-100 text-indigo-800"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-400"
+        return "bg-gray-100 text-gray-800"
     }
   }
 
-  const getNextAction = (status: OrderStatus): { label: string; nextStatus: OrderStatus } | null => {
-    switch (status) {
+  const getActionButtons = (order: Order) => {
+    const isProcessing = processingOrders.has(order.id)
+
+    switch (order.status) {
       case "PENDING":
-        return { label: "Accept Order", nextStatus: "ACCEPTED" }
+      case "NEW":
+        return (
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => handleStatusUpdate(order.id, "ACCEPTED")}
+              disabled={isProcessing || isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isProcessing ? "Processing..." : "Accept Order"}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => handleStatusUpdate(order.id, "CANCELLED")}
+              disabled={isProcessing || isPending}
+            >
+              {isProcessing ? "Processing..." : "Reject"}
+            </Button>
+          </div>
+        )
       case "ACCEPTED":
-        return { label: "Start Preparing", nextStatus: "PREPARING" }
+        return (
+          <Button
+            size="sm"
+            onClick={() => handleStatusUpdate(order.id, "PREPARING")}
+            disabled={isProcessing || isPending}
+            className="bg-orange-600 hover:bg-orange-700"
+          >
+            {isProcessing ? "Processing..." : "Start Preparing"}
+          </Button>
+        )
       case "PREPARING":
-        return { label: "Ready for Pickup/Delivery", nextStatus: "READY" }
-      case "READY":
-        return { label: "Out for Delivery", nextStatus: "OUT_FOR_DELIVERY" }
+        return (
+          <Button
+            size="sm"
+            onClick={() => handleStatusUpdate(order.id, "READY_FOR_PICKUP")}
+            disabled={isProcessing || isPending}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            {isProcessing ? "Processing..." : "Ready for Pickup"}
+          </Button>
+        )
+      case "READY_FOR_PICKUP":
+        return (
+          <Button
+            size="sm"
+            onClick={() => handleStatusUpdate(order.id, "OUT_FOR_DELIVERY")}
+            disabled={isProcessing || isPending}
+            className="bg-indigo-600 hover:bg-indigo-700"
+          >
+            {isProcessing ? "Processing..." : "Out for Delivery"}
+          </Button>
+        )
       default:
         return null
     }
   }
 
+  const formatTime = (timeString: string) => {
+    const date = new Date(timeString)
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  if (orders.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">No active orders at the moment.</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Live Orders</CardTitle>
-          <div className="flex items-center space-x-2">
-            <div
-              className={`w-3 h-3 rounded-full transition-colors ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`}
-            />
-            <span className="text-sm text-gray-600">{isConnected ? "Connected" : "Disconnected"}</span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {orders.length === 0 ? (
-            <div className="p-8 text-center">
-              <ChefHat className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No active orders</h3>
-              <p className="text-gray-500">New orders will appear here in real-time as they are placed.</p>
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {orders.map((order) => (
+        <Card key={order.id} className="relative">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">{order.orderNumber}</CardTitle>
+              <Badge className={getStatusColor(order.status)}>{order.status.replace("_", " ")}</Badge>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {orders.map((order) => {
-                const nextAction = getNextAction(order.status)
-                return (
-                  <Card key={order.id} className={`border-l-4 ${getStatusColor(order.status).split(" ")[2]}`}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="flex items-center space-x-2 text-base">
-                          <User className="w-5 h-5" />
-                          <span>{order.customerName}</span>
-                        </CardTitle>
-                        <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
-                      </div>
-                      <div className="flex items-center text-sm text-gray-500 pt-1">
-                        <Clock className="w-4 h-4 mr-1" />
-                        <span>{formatTime(order.orderTime)}</span>
-                        <span className="mx-2">|</span>
-                        <span>{order.orderNumber}</span>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <h4 className="font-medium mb-2 text-sm">Items</h4>
-                        <div className="space-y-1 text-sm">
-                          {order.items.map((item, index) => (
-                            <div key={index} className="flex justify-between items-center">
-                              <span>
-                                {item.quantity}x {item.name}
-                              </span>
-                              <span>{formatPrice(item.price * item.quantity)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <Separator />
-                      {order.deliveryType === "delivery" && order.deliveryAddress && (
-                        <div className="flex items-start space-x-2 text-sm">
-                          <MapPin className="w-4 h-4 mt-0.5 text-gray-500 flex-shrink-0" />
-                          <p className="text-gray-600">{order.deliveryAddress}</p>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between pt-2">
-                        <div className="text-lg font-bold">{formatPrice(order.total)}</div>
-                        <div className="flex items-center space-x-2">
-                          {order.status === "PENDING" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleUpdateStatus(order.id, "CANCELLED")}
-                              className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
-                            >
-                              <XCircle className="w-4 h-4 mr-1" />
-                              Reject
-                            </Button>
-                          )}
-                          {nextAction && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleUpdateStatus(order.id, nextAction.nextStatus)}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              {nextAction.label}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <User className="h-4 w-4" />
+              <span>{order.customerName}</span>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Clock className="h-4 w-4" />
+              <span>Ordered at {formatTime(order.orderTime)}</span>
+            </div>
+            {order.deliveryType === "delivery" && order.deliveryAddress && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <MapPin className="h-4 w-4" />
+                <span className="truncate">{order.deliveryAddress}</span>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 mb-4">
+              {order.items.map((item, index) => (
+                <div key={index} className="flex justify-between text-sm">
+                  <span>
+                    {item.quantity}x {item.name}
+                  </span>
+                  <span>${item.price.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between items-center font-semibold border-t pt-2">
+              <span>Total:</span>
+              <span>${order.total.toFixed(2)}</span>
+            </div>
+            <div className="mt-4">{getActionButtons(order)}</div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }

@@ -1,19 +1,41 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { getOrderDetails } from "@/app/customer/actions"
 import LiveTracking from "@/components/tracking/live-tracking"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { AlertCircle, Loader2 } from "lucide-react"
-import type { Order, OrderItem, RestaurantProfile, CustomerProfile, User } from "@prisma/client"
+import type {
+  Order,
+  OrderItem,
+  RestaurantProfile,
+  CustomerProfile,
+  User,
+  OrderStatus,
+  DriverProfile,
+} from "@prisma/client"
+import { getSocket } from "@/lib/socket"
 
-type FullOrderItem = OrderItem & { menuItem: { name: string } }
+type FullOrderItem = OrderItem & {
+  menuItem: {
+    name: string
+  }
+}
+
 type FullOrder = Order & {
   orderItems: FullOrderItem[]
   restaurant: RestaurantProfile
-  customerProfile: CustomerProfile & { user: User }
+  customerProfile: CustomerProfile & {
+    user: User
+  }
+  driverProfile: DriverProfile | null
+}
+
+type DriverLocation = {
+  lat: number
+  lng: number
 }
 
 export default function TrackOrderPage() {
@@ -22,6 +44,7 @@ export default function TrackOrderPage() {
   const [order, setOrder] = useState<FullOrder | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [driverLocation, setDriverLocation] = useState<DriverLocation | null>(null)
 
   useEffect(() => {
     if (!orderId) return
@@ -32,6 +55,17 @@ export default function TrackOrderPage() {
         const orderDetails = (await getOrderDetails(orderId)) as FullOrder | null
         if (orderDetails) {
           setOrder(orderDetails)
+          // Set initial driver location if available
+          if (
+            orderDetails.driverProfile &&
+            orderDetails.driverProfile.latitude &&
+            orderDetails.driverProfile.longitude
+          ) {
+            setDriverLocation({
+              lat: orderDetails.driverProfile.latitude,
+              lng: orderDetails.driverProfile.longitude,
+            })
+          }
         } else {
           setError("Order not found or you do not have permission to view it.")
         }
@@ -45,6 +79,33 @@ export default function TrackOrderPage() {
 
     fetchOrder()
   }, [orderId])
+
+  useEffect(() => {
+    if (!order) return
+
+    const socket = getSocket()
+    if (!socket) return
+
+    const handleOrderStatusUpdate = (data: { orderId: string; status: OrderStatus }) => {
+      if (data.orderId === order.id) {
+        setOrder((prevOrder) => (prevOrder ? { ...prevOrder, status: data.status } : null))
+      }
+    }
+
+    const handleDriverLocationUpdate = (data: { orderId: string; lat: number; lng: number }) => {
+      if (data.orderId === order.id) {
+        setDriverLocation({ lat: data.lat, lng: data.lng })
+      }
+    }
+
+    socket.on("order_notification", handleOrderStatusUpdate)
+    socket.on("driver_location_update", handleDriverLocationUpdate)
+
+    return () => {
+      socket.off("order_notification", handleOrderStatusUpdate)
+      socket.off("driver_location_update", handleDriverLocationUpdate)
+    }
+  }, [order])
 
   if (loading) {
     return (
@@ -65,14 +126,22 @@ export default function TrackOrderPage() {
   }
 
   if (!order) {
-    return null // Should be covered by error state
+    return null
   }
 
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
-          <LiveTracking orderStatus={order.status} />
+          <LiveTracking
+            orderStatus={order.status}
+            driverLocation={driverLocation}
+            restaurantLocation={{
+              lat: order.restaurant.mapLatitude ?? 0,
+              lng: order.restaurant.mapLongitude ?? 0,
+            }}
+            customerAddress={order.deliveryAddress}
+          />
         </div>
         <div className="lg:col-span-1">
           <Card>

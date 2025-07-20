@@ -18,15 +18,21 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
     })
 
     io.on("connection", (socket) => {
-      console.log(`🔌 New client connected on server: ${socket.id}`)
+      console.log(`New client connected on server: ${socket.id}`)
 
       socket.on("join-restaurant-room", (restaurantId: string) => {
         socket.join(restaurantId)
         console.log(`Client ${socket.id} joined room for restaurant ${restaurantId}`)
       })
 
+      socket.on("join-user-room", (userId: string) => {
+        const roomName = `user-${userId}`
+        socket.join(roomName)
+        console.log(`Client ${socket.id} joined room for user ${roomName}`)
+      })
+
       socket.on("disconnect", () => {
-        console.log(`🔥 Client disconnected from server: ${socket.id}`)
+        console.log(`Client disconnected from server: ${socket.id}`)
       })
     })
 

@@ -9,9 +9,10 @@ interface Restaurant {
   name: string
   description: string | null
   image: string | null
+  bannerImage: string | null
   cuisine: string | null
   rating: number | null
-  deliveryTime?: string | null // Made optional
+  deliveryTime?: string | null
   deliveryFee: number | null
   isOpen: boolean
 }
@@ -26,12 +27,15 @@ export function RestaurantCard({ restaurant, featured = false }: RestaurantCardP
     ? "group cursor-pointer hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
     : "group cursor-pointer hover:shadow-md transition-all duration-200"
 
+  // Use bannerImage if available, otherwise fall back to image, then placeholder
+  const displayImage = restaurant.bannerImage || restaurant.image || "/placeholder.svg?height=200&width=400"
+
   return (
     <Link href={`/customer/restaurant/${restaurant.id}`}>
       <Card className={cardClass}>
         <div className="relative">
           <img
-            src={restaurant.image || "/placeholder.svg?height=200&width=400&query=restaurant"}
+            src={displayImage || "/placeholder.svg"}
             alt={restaurant.name}
             className={`w-full object-cover rounded-t-lg ${featured ? "h-48" : "h-40"}`}
           />

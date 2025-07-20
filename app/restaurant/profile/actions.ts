@@ -1,11 +1,29 @@
 "use server"
 
+import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import * as z from "zod"
 
-export async function updateRestaurantProfile(formData: FormData) {
+const profileFormSchema = z.object({
+  name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
+  description: z.string().optional(),
+  streetAddress: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  phone: z.string().optional(),
+  cuisine: z.string().optional(),
+  website: z.string().url().optional().or(z.literal("")),
+  facebookUrl: z.string().url().optional().or(z.literal("")),
+  instagramUrl: z.string().url().optional().or(z.literal("")),
+  bannerImage: z.string().optional(),
+})
+
+type ProfileFormValues = z.infer<typeof profileFormSchema>
+
+export async function updateRestaurantProfile(data: ProfileFormValues) {
   const session = await auth()
 
   if (!session?.user?.id) {
@@ -13,72 +31,66 @@ export async function updateRestaurantProfile(formData: FormData) {
   }
 
   try {
-    const name = formData.get("name") as string
-    const description = formData.get("description") as string
-    const address = formData.get("address") as string
-    const phone = formData.get("phone") as string
-    const cuisine = formData.get("cuisine") as string
-    const category = formData.get("category") as string
-    const website = formData.get("website") as string
-    const deliveryFee = Number.parseFloat(formData.get("deliveryFee") as string) || 0
-    const minOrder = Number.parseFloat(formData.get("minOrder") as string) || 0
-    const businessRegistrationNumber = formData.get("businessRegistrationNumber") as string
-    const taxId = formData.get("taxId") as string
-    const bankAccountNumber = formData.get("bankAccountNumber") as string
-    const bankName = formData.get("bankName") as string
-    const swiftCode = formData.get("swiftCode") as string
+    const validatedData = profileFormSchema.parse(data)
 
-    // Update or create restaurant profile
-    await prisma.restaurantProfile.upsert({
+    // Get or create restaurant profile first
+    let restaurantProfile = await prisma.restaurantProfile.findUnique({
       where: { userId: session.user.id },
-      update: {
-        name,
-        description,
-        address,
-        phone,
-        cuisine: cuisine ? [cuisine] : [],
-        category,
-        website,
-        deliveryFee,
-        minOrder,
-        businessRegistrationNumber,
-        taxId,
-        bankAccountNumber,
-        bankName,
-        swiftCode,
-        // Set restaurant as open by default when profile is updated
-        isOpen: true,
-      },
-      create: {
-        userId: session.user.id,
-        name,
-        description,
-        address,
-        phone,
-        cuisine: cuisine ? [cuisine] : [],
-        category,
-        website,
-        deliveryFee,
-        minOrder,
-        businessRegistrationNumber,
-        taxId,
-        bankAccountNumber,
-        bankName,
-        swiftCode,
-        isOpen: true,
-      },
     })
 
-    // Revalidate all pages that might show restaurant data
-    revalidatePath("/restaurant/dashboard")
+    if (!restaurantProfile) {
+      // Create new restaurant profile
+      restaurantProfile = await prisma.restaurantProfile.create({
+        data: {
+          userId: session.user.id,
+          name: validatedData.name,
+          description: validatedData.description,
+          streetAddress: validatedData.streetAddress,
+          city: validatedData.city,
+          state: validatedData.state,
+          postalCode: validatedData.postalCode,
+          phone: validatedData.phone,
+          cuisine: validatedData.cuisine ? validatedData.cuisine.split(",").map((s) => s.trim()) : [],
+          website: validatedData.website,
+          facebookUrl: validatedData.facebookUrl,
+          instagramUrl: validatedData.instagramUrl,
+          bannerImage: validatedData.bannerImage,
+        },
+      })
+    } else {
+      // Update existing restaurant profile
+      const cuisineArray = validatedData.cuisine ? validatedData.cuisine.split(",").map((s) => s.trim()) : []
+
+      restaurantProfile = await prisma.restaurantProfile.update({
+        where: { id: restaurantProfile.id },
+        data: {
+          name: validatedData.name,
+          description: validatedData.description,
+          streetAddress: validatedData.streetAddress,
+          city: validatedData.city,
+          state: validatedData.state,
+          postalCode: validatedData.postalCode,
+          phone: validatedData.phone,
+          cuisine: cuisineArray,
+          website: validatedData.website,
+          facebookUrl: validatedData.facebookUrl,
+          instagramUrl: validatedData.instagramUrl,
+          bannerImage: validatedData.bannerImage,
+        },
+      })
+    }
+
     revalidatePath("/restaurant/profile")
-    revalidatePath("/customer/dashboard")
-    revalidatePath("/customer/restaurant")
+    revalidatePath("/restaurant/dashboard")
 
     return { success: true, message: "Profile updated successfully" }
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: "Validation failed", issues: error.errors }
+    }
     console.error("Error updating restaurant profile:", error)
-    return { success: false, message: "Failed to update profile" }
+    const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred"
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -90,20 +102,23 @@ export async function getRestaurantProfile() {
       success: false,
       error: "Not authenticated",
       profile: null,
+      user: null,
     }
   }
 
   try {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      include: {
-        restaurantProfile: true,
-      },
+    })
+
+    const restaurantProfile = await prisma.restaurantProfile.findUnique({
+      where: { userId: session.user.id },
     })
 
     return {
       success: true,
-      profile: user?.restaurantProfile,
+      profile: restaurantProfile,
+      user,
     }
   } catch (error) {
     console.error("Error fetching restaurant profile:", error)
@@ -111,6 +126,7 @@ export async function getRestaurantProfile() {
       success: false,
       error: "Failed to fetch profile",
       profile: null,
+      user: null,
     }
   }
 }

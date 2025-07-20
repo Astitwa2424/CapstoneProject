@@ -1,3 +1,5 @@
+"use client"
+
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Star, Clock, Leaf } from "lucide-react"
@@ -34,6 +36,10 @@ export function FoodItemCard({ item }: FoodItemCardProps) {
           alt={item.name}
           fill
           className="object-cover"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement
+            target.src = `/placeholder.svg?height=200&width=300&text=${encodeURIComponent(item.name)}`
+          }}
         />
         {item.isVegetarian && (
           <Badge className="absolute top-2 left-2 bg-green-500">

@@ -1,231 +1,303 @@
-import { requireRole } from "@/lib/auth-utils"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Truck, DollarSign, Clock, MapPin, Star, Navigation, Phone } from "lucide-react"
-import { LogoutButton } from "@/components/auth/logout-button"
-import { DocumentUpload } from "@/components/verification/document-upload"
+"use client"
 
-export default async function DriverDashboard() {
-  const session = await requireRole(["DRIVER"])
+import { useState, useEffect, useTransition } from "react"
+import {
+  getDriverDashboardData,
+  toggleAvailability,
+  acceptOrder,
+  completeDelivery,
+  updateDriverLocation,
+} from "@/app/driver/actions"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Loader2, MapPin, Navigation, CheckCircle } from "lucide-react"
+import { toast } from "sonner"
+import { getSocket } from "@/lib/socket"
+import type { Order, RestaurantProfile, DriverProfile, CustomerProfile, User } from "@prisma/client"
+
+type FullOrder = Order & { restaurant: RestaurantProfile; customerProfile: CustomerProfile & { user: User } }
+type AvailableOrder = Order & { restaurant: RestaurantProfile }
+
+export default function DriverDashboard() {
+  const [driver, setDriver] = useState<DriverProfile | null>(null)
+  const [activeOrder, setActiveOrder] = useState<FullOrder | null>(null)
+  const [availableOrders, setAvailableOrders] = useState<AvailableOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isPending, startTransition] = useTransition()
+  const [locationError, setLocationError] = useState<string | null>(null)
+
+  const isAvailable = driver?.isAvailable ?? false
+
+  const fetchData = async () => {
+    try {
+      const data = await getDriverDashboardData()
+      setDriver(data.driver)
+      setActiveOrder(data.activeOrder as FullOrder | null)
+      setAvailableOrders(data.availableOrders as AvailableOrder[])
+    } catch (error) {
+      toast.error("Failed to load dashboard data.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  // Real-time updates for new available orders
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    socket.emit("join_room", "drivers")
+
+    const handleNewOrder = (newOrder: AvailableOrder) => {
+      setAvailableOrders((prev) => [newOrder, ...prev])
+      toast.info(`New delivery available from ${newOrder.restaurant.name}!`)
+    }
+
+    const handleOrderAccepted = (data: { orderId: string }) => {
+      setAvailableOrders((prev) => prev.filter((o) => o.id !== data.orderId))
+    }
+
+    socket.on("new_order_for_drivers", handleNewOrder)
+    socket.on("order_accepted", handleOrderAccepted)
+
+    return () => {
+      socket.off("new_order_for_drivers", handleNewOrder)
+      socket.off("order_accepted", handleOrderAccepted)
+      socket.emit("leave_room", "drivers")
+    }
+  }, [])
+
+  // Real-time location tracking
+  useEffect(() => {
+    let watchId: number | null = null
+
+    if (isAvailable && activeOrder) {
+      if (!navigator.geolocation) {
+        setLocationError("Geolocation is not supported by your browser.")
+        return
+      }
+
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          // Send location to server without blocking UI
+          updateDriverLocation(latitude, longitude)
+        },
+        (error) => {
+          console.error("Geolocation error:", error)
+          setLocationError(`Location Error: ${error.message}`)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        },
+      )
+    }
+
+    return () => {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId)
+      }
+    }
+  }, [isAvailable, activeOrder])
+
+  const handleToggleAvailability = async (checked: boolean) => {
+    startTransition(async () => {
+      const result = await toggleAvailability(checked)
+      if (result.success) {
+        setDriver((prev) => (prev ? { ...prev, isAvailable: result.isAvailable } : null))
+        toast.success(`You are now ${result.isAvailable ? "online" : "offline"}.`)
+      } else {
+        toast.error(result.error)
+      }
+    })
+  }
+
+  const handleAcceptOrder = async (orderId: string) => {
+    startTransition(async () => {
+      const result = await acceptOrder(orderId)
+      if (result.success) {
+        toast.success("Order accepted! Time to get moving.")
+        await fetchData() // Refresh all data
+      } else {
+        toast.error(result.error)
+        // Another driver might have taken it, so refresh available orders
+        setAvailableOrders((prev) => prev.filter((o) => o.id !== orderId))
+      }
+    })
+  }
+
+  const handleCompleteDelivery = async (orderId: string) => {
+    startTransition(async () => {
+      const result = await completeDelivery(orderId)
+      if (result.success) {
+        toast.success("Delivery completed! Great job.")
+        setActiveOrder(null)
+        await fetchData() // Refresh all data
+      } else {
+        toast.error(result.error)
+      }
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Driver Dashboard</h1>
-              <p className="text-gray-600">Welcome back, {session.user.name}!</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Badge variant="secondary" className="bg-green-100 text-green-700">
-                Online
-              </Badge>
-              <LogoutButton />
-              <Button>
-                <Truck className="w-4 h-4 mr-2" />
-                Go Online
-              </Button>
-            </div>
-          </div>
+    <div className="container mx-auto p-4">
+      <header className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Driver Dashboard</h1>
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="availability-toggle"
+            checked={isAvailable}
+            onCheckedChange={handleToggleAvailability}
+            disabled={isPending}
+          />
+          <Label
+            htmlFor="availability-toggle"
+            className={`font-semibold ${isAvailable ? "text-green-600" : "text-red-600"}`}
+          >
+            {isPending ? "Updating..." : isAvailable ? "Online" : "Offline"}
+          </Label>
         </div>
-      </div>
+      </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="deliveries">Deliveries</TabsTrigger>
-            <TabsTrigger value="earnings">Earnings</TabsTrigger>
-            <TabsTrigger value="verification">Verification</TabsTrigger>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-          </TabsList>
+      {locationError && <p className="text-red-500 text-center mb-4">{locationError}</p>}
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Quick Stats */}
-            <div className="grid md:grid-cols-4 gap-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Today's Earnings</p>
-                      <p className="text-2xl font-bold">$127.50</p>
-                    </div>
-                    <DollarSign className="w-8 h-8 text-green-500" />
-                  </div>
-                </CardContent>
-              </Card>
+      {activeOrder ? (
+        <ActiveOrderCard order={activeOrder} onComplete={handleCompleteDelivery} isPending={isPending} />
+      ) : isAvailable ? (
+        <AvailableOrdersList orders={availableOrders} onAccept={handleAcceptOrder} isPending={isPending} />
+      ) : (
+        <Card className="text-center">
+          <CardHeader>
+            <CardTitle>You are Offline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">Go online to see available deliveries.</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
 
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Deliveries Today</p>
-                      <p className="text-2xl font-bold">12</p>
-                    </div>
-                    <Truck className="w-8 h-8 text-blue-500" />
-                  </div>
-                </CardContent>
-              </Card>
+function ActiveOrderCard({
+  order,
+  onComplete,
+  isPending,
+}: { order: FullOrder; onComplete: (id: string) => void; isPending: boolean }) {
+  const pickupAddress = `${order.restaurant.address}, ${order.restaurant.city}`
+  const deliveryAddress = order.deliveryAddress
 
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Hours Online</p>
-                      <p className="text-2xl font-bold">6.5</p>
-                    </div>
-                    <Clock className="w-8 h-8 text-orange-500" />
-                  </div>
-                </CardContent>
-              </Card>
+  const openInGoogleMaps = (address: string) => {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`, "_blank")
+  }
 
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Rating</p>
-                      <p className="text-2xl font-bold">4.9</p>
-                    </div>
-                    <Star className="w-8 h-8 text-yellow-500" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+  return (
+    <Card className="w-full max-w-2xl mx-auto shadow-lg">
+      <CardHeader>
+        <CardTitle className="text-2xl">Active Delivery</CardTitle>
+        <CardDescription>Order #{order.id.slice(0, 8)}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <h3 className="font-semibold text-lg mb-2 flex items-center">
+            <MapPin className="w-5 h-5 mr-2 text-blue-500" /> Pickup From
+          </h3>
+          <p className="font-bold">{order.restaurant.name}</p>
+          <p className="text-muted-foreground">{pickupAddress}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 bg-transparent"
+            onClick={() => openInGoogleMaps(pickupAddress)}
+          >
+            <Navigation className="w-4 h-4 mr-2" />
+            Navigate to Pickup
+          </Button>
+        </div>
+        <div>
+          <h3 className="font-semibold text-lg mb-2 flex items-center">
+            <CheckCircle className="w-5 h-5 mr-2 text-green-500" /> Deliver To
+          </h3>
+          <p className="font-bold">{order.customerProfile.user.name}</p>
+          <p className="text-muted-foreground">{deliveryAddress}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 bg-transparent"
+            onClick={() => openInGoogleMaps(deliveryAddress)}
+          >
+            <Navigation className="w-4 h-4 mr-2" />
+            Navigate to Delivery
+          </Button>
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button className="w-full" onClick={() => onComplete(order.id)} disabled={isPending}>
+          {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Mark as Delivered
+        </Button>
+      </CardFooter>
+    </Card>
+  )
+}
 
-            {/* Active Delivery */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Active Delivery</CardTitle>
-                <CardDescription>Current delivery in progress</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-semibold text-lg">Order #12345</h3>
-                      <p className="text-gray-600">Pizza Palace → John Doe</p>
-                    </div>
-                    <Badge className="bg-blue-100 text-blue-700">In Transit</Badge>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-4 mb-4">
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm">123 Main St, City</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm">ETA: 15 minutes</span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-3">
-                    <Button size="sm">
-                      <Navigation className="w-4 h-4 mr-2" />
-                      Navigate
-                    </Button>
-                    <Button size="sm" variant="outline">
-                      <Phone className="w-4 h-4 mr-2" />
-                      Call Customer
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+function AvailableOrdersList({
+  orders,
+  onAccept,
+  isPending,
+}: { orders: AvailableOrder[]; onAccept: (id: string) => void; isPending: boolean }) {
+  if (orders.length === 0) {
+    return (
+      <Card className="text-center">
+        <CardHeader>
+          <CardTitle>No Available Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">Waiting for new deliveries. You'll be notified!</p>
+        </CardContent>
+      </Card>
+    )
+  }
 
-            {/* Recent Deliveries */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Deliveries</CardTitle>
-                <CardDescription>Your latest completed deliveries</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    {
-                      order: "#12344",
-                      restaurant: "Burger Barn",
-                      customer: "Jane Smith",
-                      earnings: "$8.50",
-                      time: "1 hour ago",
-                    },
-                    {
-                      order: "#12343",
-                      restaurant: "Sushi Zen",
-                      customer: "Mike Johnson",
-                      earnings: "$12.00",
-                      time: "2 hours ago",
-                    },
-                    {
-                      order: "#12342",
-                      restaurant: "Taco Fiesta",
-                      customer: "Sarah Wilson",
-                      earnings: "$6.75",
-                      time: "3 hours ago",
-                    },
-                  ].map((delivery, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <p className="font-semibold">{delivery.order}</p>
-                        <p className="text-sm text-gray-600">
-                          {delivery.restaurant} → {delivery.customer}
-                        </p>
-                        <p className="text-xs text-gray-500">{delivery.time}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-green-600">{delivery.earnings}</p>
-                        <Badge variant="secondary">Completed</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="deliveries">
-            <Card>
-              <CardHeader>
-                <CardTitle>Delivery History</CardTitle>
-                <CardDescription>All your completed deliveries</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">Delivery history will be displayed here...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="earnings">
-            <Card>
-              <CardHeader>
-                <CardTitle>Earnings Overview</CardTitle>
-                <CardDescription>Track your earnings and payouts</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">Earnings details will be displayed here...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="verification">
-            <DocumentUpload userType="driver" />
-          </TabsContent>
-
-          <TabsContent value="profile">
-            <Card>
-              <CardHeader>
-                <CardTitle>Driver Profile</CardTitle>
-                <CardDescription>Manage your driver information</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600">Profile settings will be displayed here...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-semibold">Available for Pickup</h2>
+      {orders.map((order) => (
+        <Card key={order.id}>
+          <CardHeader>
+            <CardTitle>{order.restaurant.name}</CardTitle>
+            <CardDescription>
+              {order.restaurant.address}, {order.restaurant.city}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p>Delivery to: {order.deliveryAddress.split(",")[0]}</p>
+            <p className="text-muted-foreground">Order Total: ${order.total.toFixed(2)}</p>
+          </CardContent>
+          <CardFooter>
+            <Button className="w-full" onClick={() => onAccept(order.id)} disabled={isPending}>
+              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Accept Delivery
+            </Button>
+          </CardFooter>
+        </Card>
+      ))}
     </div>
   )
 }

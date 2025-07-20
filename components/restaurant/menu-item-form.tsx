@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -9,11 +8,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/components/ui/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createMenuItem, updateMenuItem } from "@/app/restaurant/actions"
 import { Loader2, Save } from "lucide-react"
+import { ImageUpload } from "@/components/ui/image-upload"
 import type { MenuItem } from "@prisma/client"
+import { toast } from "sonner"
 
 interface MenuItemFormProps {
   initialData?: MenuItem | null
@@ -21,7 +21,6 @@ interface MenuItemFormProps {
 
 export function MenuItemForm({ initialData }: MenuItemFormProps) {
   const router = useRouter()
-  const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
 
   const [formData, setFormData] = useState({
@@ -38,76 +37,53 @@ export function MenuItemForm({ initialData }: MenuItemFormProps) {
     isActive: initialData?.isActive ?? true,
   })
 
-  const handleInputChange = (field: string, value: string | number | boolean) => {
+  const handleInputChange = (field: string, value: string | number | boolean) =>
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }))
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.name.trim()) {
-      toast({
-        title: "Error",
-        description: "Item name is required",
-        variant: "destructive",
-      })
+      toast.error("Item name is required")
       return
     }
 
     if (formData.price <= 0) {
-      toast({
-        title: "Error",
-        description: "Price must be greater than 0",
-        variant: "destructive",
-      })
+      toast.error("Price must be greater than 0")
       return
     }
 
     startTransition(async () => {
-      try {
-        const menuItemData = {
-          name: formData.name.trim(),
-          description: formData.description.trim(),
-          price: Number(formData.price),
-          category: formData.category,
-          allergens: formData.allergens,
-          image: formData.image,
-          spicyLevel: Number(formData.spicyLevel),
-          isVegetarian: formData.isVegetarian,
-          isVegan: formData.isVegan,
-          isGlutenFree: formData.isGlutenFree,
-          isActive: formData.isActive,
-        }
+      const menuItemData = {
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        price: Number(formData.price),
+        category: formData.category,
+        allergens: formData.allergens,
+        image: formData.image,
+        spicyLevel: Number(formData.spicyLevel),
+        isVegetarian: formData.isVegetarian,
+        isVegan: formData.isVegan,
+        isGlutenFree: formData.isGlutenFree,
+        isActive: formData.isActive,
+      }
 
-        let result
-        if (initialData) {
-          result = await updateMenuItem(initialData.id, menuItemData)
-        } else {
-          result = await createMenuItem(menuItemData)
-        }
+      let result
+      if (initialData) {
+        result = await updateMenuItem(initialData.id, menuItemData)
+      } else {
+        result = await createMenuItem(menuItemData)
+      }
 
-        if (result.success) {
-          toast({
-            title: "Success",
-            description: `Menu item ${initialData ? "updated" : "created"} successfully`,
-          })
-          router.push("/restaurant/dashboard/menu")
-        } else {
-          toast({
-            title: "Error",
-            description: result.error || `Failed to ${initialData ? "update" : "create"} menu item`,
-            variant: "destructive",
-          })
-        }
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "An unexpected error occurred",
-          variant: "destructive",
-        })
+      if (result.success) {
+        toast.success(`Menu item ${initialData ? "updated" : "created"} successfully`)
+        router.push("/restaurant/dashboard/menu")
+        router.refresh() // Ensures the list is updated
+      } else {
+        toast.error(result.error || `Failed to ${initialData ? "update" : "create"} menu item`)
       }
     })
   }
@@ -185,16 +161,7 @@ export function MenuItemForm({ initialData }: MenuItemFormProps) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="image">Image URL</Label>
-        <Input
-          id="image"
-          type="url"
-          value={formData.image}
-          onChange={(e) => handleInputChange("image", e.target.value)}
-          placeholder="https://example.com/image.jpg"
-        />
-      </div>
+      <ImageUpload value={formData.image} onChange={(url) => handleInputChange("image", url)} disabled={isPending} />
 
       <div className="space-y-2">
         <Label htmlFor="allergens">Allergens</Label>

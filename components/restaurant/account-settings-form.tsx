@@ -1,742 +1,441 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { toast } from "sonner"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { updateRestaurantProfile } from "@/app/restaurant/profile/actions"
-import { updateRestaurantSettings } from "@/app/restaurant/settings/actions"
-import {
-  User,
-  Phone,
-  Mail,
-  Globe,
-  MapPin,
-  Clock,
-  Save,
-  Loader2,
-  Facebook,
-  Instagram,
-  Twitter,
-  Bell,
-  Store,
-} from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { BannerImageUpload } from "@/components/ui/banner-image-upload"
+import { updateRestaurantAccount } from "@/app/restaurant/settings/actions"
+import { toast } from "sonner"
 
-const accountSchema = z.object({
-  // Profile Information
-  restaurantName: z.string().min(1, "Restaurant name is required"),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().optional(),
+const accountFormSchema = z.object({
+  // Profile fields
+  name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
   description: z.string().optional(),
-  category: z.string().optional(),
-  website: z.string().url().optional().or(z.literal("")),
-  facebookUrl: z.string().url().optional().or(z.literal("")),
-  instagramUrl: z.string().url().optional().or(z.literal("")),
-  twitterUrl: z.string().url().optional().or(z.literal("")),
-
-  // Location
   streetAddress: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
   postalCode: z.string().optional(),
-  country: z.string().optional(),
+  phone: z.string().optional(),
+  cuisine: z.string().optional(),
+  website: z.string().url().optional().or(z.literal("")),
+  facebookUrl: z.string().url().optional().or(z.literal("")),
+  instagramUrl: z.string().url().optional().or(z.literal("")),
+  bannerImage: z.string().optional(),
 
-  // Business Settings
-  isOpen: z.boolean().default(true),
-  acceptsOnlineOrders: z.boolean().default(true),
-  acceptsReservations: z.boolean().default(false),
+  // Business fields
+  businessRegistrationNumber: z.string().optional(),
+  taxId: z.string().optional(),
+  category: z.string().optional(),
+  operatingHours: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  bankName: z.string().optional(),
 
-  // Operating Hours
-  mondayEnabled: z.boolean().default(true),
-  mondayOpen: z.string().default("09:00"),
-  mondayClose: z.string().default("22:00"),
-  tuesdayEnabled: z.boolean().default(true),
-  tuesdayOpen: z.string().default("09:00"),
-  tuesdayClose: z.string().default("22:00"),
-  wednesdayEnabled: z.boolean().default(true),
-  wednesdayOpen: z.string().default("09:00"),
-  wednesdayClose: z.string().default("22:00"),
-  thursdayEnabled: z.boolean().default(true),
-  thursdayOpen: z.string().default("09:00"),
-  thursdayClose: z.string().default("22:00"),
-  fridayEnabled: z.boolean().default(true),
-  fridayOpen: z.string().default("09:00"),
-  fridayClose: z.string().default("23:00"),
-  saturdayEnabled: z.boolean().default(true),
-  saturdayOpen: z.string().default("09:00"),
-  saturdayClose: z.string().default("23:00"),
-  sundayEnabled: z.boolean().default(true),
-  sundayOpen: z.string().default("10:00"),
-  sundayClose: z.string().default("21:00"),
-
-  // Delivery Settings
-  deliveryRadius: z.number().min(1).max(50).default(5),
-  deliveryFee: z.number().min(0).default(0),
-  minOrderAmount: z.number().min(0).default(0),
-  estimatedDeliveryTime: z.number().min(10).max(120).default(30),
-
-  // Notifications
-  emailNotifications: z.boolean().default(true),
-  smsNotifications: z.boolean().default(false),
-  orderNotifications: z.boolean().default(true),
-
-  // Payment
-  acceptCashOnDelivery: z.boolean().default(true),
-  acceptCardPayments: z.boolean().default(true),
+  // Settings fields
+  isOpen: z.boolean().default(false),
+  deliveryFee: z.coerce.number().min(0).default(0),
+  minOrder: z.coerce.number().min(0).default(0),
 })
 
-type AccountFormData = z.infer<typeof accountSchema>
+type AccountFormValues = z.infer<typeof accountFormSchema>
 
 interface AccountSettingsFormProps {
-  initialProfile?: any
-  initialSettings?: any
-  userData?: any
+  initialProfile: any
+  initialSettings: any
+  userData: any
 }
 
 export function AccountSettingsForm({ initialProfile, initialSettings, userData }: AccountSettingsFormProps) {
-  const [isPending, startTransition] = useTransition()
-  const [activeTab, setActiveTab] = useState("profile")
+  const [isLoading, setIsLoading] = useState(false)
 
-  const form = useForm<AccountFormData>({
-    resolver: zodResolver(accountSchema),
+  const form = useForm<AccountFormValues>({
+    resolver: zodResolver(accountFormSchema),
     defaultValues: {
-      restaurantName: initialProfile?.name || "",
-      email: userData?.email || "",
-      phone: initialProfile?.phone || "",
+      name: initialProfile?.name || "",
       description: initialProfile?.description || "",
-      category: initialProfile?.category || "",
-      website: initialProfile?.website || "",
-      facebookUrl: initialProfile?.facebookUrl || "",
-      instagramUrl: initialProfile?.instagramUrl || "",
-      twitterUrl: initialProfile?.twitterUrl || "",
       streetAddress: initialProfile?.streetAddress || "",
       city: initialProfile?.city || "",
       state: initialProfile?.state || "",
       postalCode: initialProfile?.postalCode || "",
-      country: initialProfile?.country || "",
-      isOpen: initialProfile?.isOpen ?? true,
-      acceptsOnlineOrders: initialSettings?.acceptsOnlineOrders ?? true,
-      acceptsReservations: initialSettings?.acceptsReservations ?? false,
-      deliveryRadius: initialSettings?.deliveryRadius || 5,
-      deliveryFee: initialSettings?.deliveryFee || 0,
-      minOrderAmount: initialSettings?.minOrderAmount || 0,
-      estimatedDeliveryTime: initialSettings?.estimatedDeliveryTime || 30,
-      emailNotifications: initialSettings?.emailNotifications ?? true,
-      smsNotifications: initialSettings?.smsNotifications ?? false,
-      orderNotifications: initialSettings?.orderNotifications ?? true,
-      acceptCashOnDelivery: initialSettings?.acceptCashOnDelivery ?? true,
-      acceptCardPayments: initialSettings?.acceptCardPayments ?? true,
-      // Operating hours defaults
-      mondayEnabled: true,
-      mondayOpen: "09:00",
-      mondayClose: "22:00",
-      tuesdayEnabled: true,
-      tuesdayOpen: "09:00",
-      tuesdayClose: "22:00",
-      wednesdayEnabled: true,
-      wednesdayOpen: "09:00",
-      wednesdayClose: "22:00",
-      thursdayEnabled: true,
-      thursdayOpen: "09:00",
-      thursdayClose: "22:00",
-      fridayEnabled: true,
-      fridayOpen: "09:00",
-      fridayClose: "23:00",
-      saturdayEnabled: true,
-      saturdayOpen: "09:00",
-      saturdayClose: "23:00",
-      sundayEnabled: true,
-      sundayOpen: "10:00",
-      sundayClose: "21:00",
+      phone: initialProfile?.phone || "",
+      cuisine: Array.isArray(initialProfile?.cuisine)
+        ? initialProfile.cuisine.join(", ")
+        : initialProfile?.cuisine || "",
+      website: initialProfile?.website || "",
+      facebookUrl: initialProfile?.facebookUrl || "",
+      instagramUrl: initialProfile?.instagramUrl || "",
+      bannerImage: initialProfile?.bannerImage || "",
+      businessRegistrationNumber: initialProfile?.businessRegistrationNumber || "",
+      taxId: initialProfile?.taxId || "",
+      category: initialProfile?.category || "",
+      operatingHours: initialProfile?.operatingHours || "",
+      bankAccountNumber: initialProfile?.bankAccountNumber || "",
+      bankName: initialProfile?.bankName || "",
+      isOpen: initialProfile?.isOpen || false,
+      deliveryFee: initialProfile?.deliveryFee || 0,
+      minOrder: initialProfile?.minOrder || 0,
     },
   })
 
-  const onSubmit = async (data: AccountFormData) => {
-    startTransition(async () => {
-      try {
-        // Update profile
-        const profileResult = await updateRestaurantProfile({
-          name: data.restaurantName,
-          email: data.email,
-          phone: data.phone,
-          description: data.description,
-          category: data.category,
-          website: data.website,
-          facebookUrl: data.facebookUrl,
-          instagramUrl: data.instagramUrl,
-          twitterUrl: data.twitterUrl,
-          streetAddress: data.streetAddress,
-          city: data.city,
-          state: data.state,
-          postalCode: data.postalCode,
-          country: data.country,
-        })
+  async function onSubmit(data: AccountFormValues) {
+    setIsLoading(true)
+    try {
+      const result = await updateRestaurantAccount(data)
 
-        // Update settings
-        const settingsResult = await updateRestaurantSettings(data)
-
-        if (profileResult.success && settingsResult.success) {
-          toast.success("Account and settings updated successfully!")
-        } else {
-          toast.error("Some updates failed. Please try again.")
-        }
-      } catch (error) {
-        toast.error("An error occurred while updating your information.")
+      if (result.success) {
+        toast.success("Account updated successfully!")
+      } else {
+        toast.error(result.error || "Failed to update account")
       }
-    })
+    } catch (error) {
+      console.error("Error updating account:", error)
+      toast.error("An unexpected error occurred")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const daysOfWeek = [
-    { key: "monday", label: "Monday" },
-    { key: "tuesday", label: "Tuesday" },
-    { key: "wednesday", label: "Wednesday" },
-    { key: "thursday", label: "Thursday" },
-    { key: "friday", label: "Friday" },
-    { key: "saturday", label: "Saturday" },
-    { key: "sunday", label: "Sunday" },
-  ]
-
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={form.watch("isOpen") ? "default" : "secondary"}
-              className={form.watch("isOpen") ? "bg-green-600" : ""}
-            >
-              {form.watch("isOpen") ? "Restaurant Open" : "Restaurant Closed"}
-            </Badge>
-          </div>
-          <Button type="submit" disabled={isPending} className="bg-blue-600 hover:bg-blue-700">
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save All Changes
-              </>
-            )}
-          </Button>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-medium">Account Settings</h3>
+        <p className="text-sm text-muted-foreground">
+          Manage your restaurant profile, business information, and settings.
+        </p>
+      </div>
+      <Separator />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="profile">
-              <User className="h-4 w-4 mr-2" />
-              Profile
-            </TabsTrigger>
-            <TabsTrigger value="business">
-              <Store className="h-4 w-4 mr-2" />
-              Business
-            </TabsTrigger>
-            <TabsTrigger value="hours">
-              <Clock className="h-4 w-4 mr-2" />
-              Hours
-            </TabsTrigger>
-            <TabsTrigger value="delivery">
-              <MapPin className="h-4 w-4 mr-2" />
-              Delivery
-            </TabsTrigger>
-            <TabsTrigger value="notifications">
-              <Bell className="h-4 w-4 mr-2" />
-              Notifications
-            </TabsTrigger>
-          </TabsList>
+      <Form {...form}>
+        <div className="space-y-6">
+          <Tabs defaultValue="profile" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="banner">Banner</TabsTrigger>
+              <TabsTrigger value="business">Business</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="profile" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Restaurant Information
-                </CardTitle>
-                <CardDescription>Basic information about your restaurant</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <TabsContent value="profile" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Restaurant Profile</CardTitle>
+                  <CardDescription>Basic information about your restaurant that customers will see.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="restaurantName"
+                    name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Restaurant Name *</FormLabel>
+                        <FormLabel>Restaurant Name</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="Your Restaurant Name" />
+                          <Input placeholder="Enter restaurant name" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          Email Address
-                        </FormLabel>
-                        <FormControl>
-                          <Input {...field} type="email" placeholder="contact@restaurant.com" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="phone"
+                    name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <Phone className="h-4 w-4" />
-                          Phone Number
-                        </FormLabel>
+                        <FormLabel>Description</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="+1 (555) 123-4567" />
+                          <Textarea placeholder="Describe your restaurant..." className="resize-none" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Restaurant Category</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="streetAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Street Address</FormLabel>
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select category" />
-                            </SelectTrigger>
+                            <Input placeholder="123 Main St" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="fast-food">Fast Food</SelectItem>
-                            <SelectItem value="casual-dining">Casual Dining</SelectItem>
-                            <SelectItem value="fine-dining">Fine Dining</SelectItem>
-                            <SelectItem value="cafe">Cafe</SelectItem>
-                            <SelectItem value="bakery">Bakery</SelectItem>
-                            <SelectItem value="food-truck">Food Truck</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} placeholder="Tell customers about your restaurant..." rows={3} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City</FormLabel>
+                          <FormControl>
+                            <Input placeholder="City" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="website"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        Website
-                      </FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="https://www.yourrestaurant.com" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State</FormLabel>
+                          <FormControl>
+                            <Input placeholder="State" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <div className="space-y-3">
-                  <Label>Social Media</Label>
+                    <FormField
+                      control={form.control}
+                      name="postalCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Postal Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="12345" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="+1 (555) 123-4567" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="cuisine"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Cuisine Type</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Italian, Pizza, Pasta" {...field} />
+                          </FormControl>
+                          <FormDescription>Separate multiple cuisines with commas</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="website"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Website</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://yourrestaurant.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <FormField
                       control={form.control}
                       name="facebookUrl"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>Facebook URL</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Facebook className="absolute left-3 top-3 h-4 w-4 text-blue-600" />
-                              <Input {...field} placeholder="Facebook URL" className="pl-10" />
-                            </div>
+                            <Input placeholder="https://facebook.com/yourrestaurant" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+
                     <FormField
                       control={form.control}
                       name="instagramUrl"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>Instagram URL</FormLabel>
                           <FormControl>
-                            <div className="relative">
-                              <Instagram className="absolute left-3 top-3 h-4 w-4 text-pink-600" />
-                              <Input {...field} placeholder="Instagram URL" className="pl-10" />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="twitterUrl"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <div className="relative">
-                              <Twitter className="absolute left-3 top-3 h-4 w-4 text-blue-400" />
-                              <Input {...field} placeholder="Twitter URL" className="pl-10" />
-                            </div>
+                            <Input placeholder="https://instagram.com/yourrestaurant" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Location
-                </CardTitle>
-                <CardDescription>Your restaurant's physical address</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="streetAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Street Address</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="123 Restaurant Street" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <TabsContent value="banner" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Restaurant Banner</CardTitle>
+                  <CardDescription>
+                    Upload a banner image that will be displayed on your restaurant page.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
                   <FormField
                     control={form.control}
-                    name="city"
+                    name="bannerImage"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>City</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="Sydney" />
+                          <BannerImageUpload value={field.value} onChange={field.onChange} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="state"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>State</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="NSW" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="postalCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Postal Code</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="2000" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="country"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Country</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Australia" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          <TabsContent value="business" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Store className="h-5 w-5" />
-                  Business Settings
-                </CardTitle>
-                <CardDescription>Configure your restaurant's operational settings</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="isOpen"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Restaurant Status</FormLabel>
-                        <FormDescription>
-                          Toggle your restaurant open/closed status. This affects order acceptance.
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <div className="flex items-center gap-2">
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                          <Badge
-                            variant={field.value ? "default" : "secondary"}
-                            className={field.value ? "bg-green-600" : ""}
-                          >
-                            {field.value ? "Open" : "Closed"}
-                          </Badge>
-                        </div>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="acceptsOnlineOrders"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Accept Online Orders</FormLabel>
-                        <FormDescription>Allow customers to place orders through the platform</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="acceptsReservations"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Accept Reservations</FormLabel>
-                        <FormDescription>Allow customers to make table reservations</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="hours" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Operating Hours
-                </CardTitle>
-                <CardDescription>
-                  Set your restaurant's operating hours. Orders will only be accepted during these times.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {daysOfWeek.map((day) => (
-                  <div key={day.key} className="flex items-center gap-4 p-4 border rounded-lg">
-                    <div className="w-24">
-                      <Label className="font-medium">{day.label}</Label>
-                    </div>
+            <TabsContent value="business" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Business Information</CardTitle>
+                  <CardDescription>Legal and business details for your restaurant.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name={`${day.key}Enabled` as keyof AccountFormData}
+                      name="businessRegistrationNumber"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>Business Registration Number</FormLabel>
                           <FormControl>
-                            <Switch checked={field.value as boolean} onCheckedChange={field.onChange} />
+                            <Input placeholder="Enter registration number" {...field} />
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <div className="flex items-center gap-2">
-                      <FormField
-                        control={form.control}
-                        name={`${day.key}Open` as keyof AccountFormData}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <Input
-                                type="time"
-                                {...field}
-                                disabled={!form.watch(`${day.key}Enabled` as keyof AccountFormData)}
-                                className="w-32"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <span className="text-gray-500">to</span>
-                      <FormField
-                        control={form.control}
-                        name={`${day.key}Close` as keyof AccountFormData}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <Input
-                                type="time"
-                                {...field}
-                                disabled={!form.watch(`${day.key}Enabled` as keyof AccountFormData)}
-                                className="w-32"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="taxId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tax ID</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter tax ID" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          <TabsContent value="delivery" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Delivery Settings
-                </CardTitle>
-                <CardDescription>Configure your delivery options and pricing</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="deliveryRadius"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Delivery Radius (km)</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-                        </FormControl>
-                        <FormDescription>Maximum distance for delivery</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="deliveryFee"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Delivery Fee ($)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormDescription>Standard delivery charge</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="minOrderAmount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Minimum Order ($)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormDescription>Minimum order amount for delivery</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="estimatedDeliveryTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Estimated Delivery Time (minutes)</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} onChange={(e) => field.onChange(Number(e.target.value))} />
-                        </FormControl>
-                        <FormDescription>Average delivery time</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Business Category</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Restaurant, Fast Food, etc." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <div className="space-y-4">
-                  <h4 className="font-medium">Payment Methods</h4>
+                    <FormField
+                      control={form.control}
+                      name="operatingHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Operating Hours</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Mon-Sun: 9AM-10PM" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="bankAccountNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bank Account Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter account number" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="bankName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Bank Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter bank name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="settings" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Restaurant Settings</CardTitle>
+                  <CardDescription>Configure your restaurant's operational settings.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="acceptCashOnDelivery"
+                    name="isOpen"
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
-                          <FormLabel>Cash on Delivery</FormLabel>
-                          <FormDescription>Accept cash payments upon delivery</FormDescription>
+                          <FormLabel className="text-base">Restaurant Open</FormLabel>
+                          <FormDescription>
+                            Toggle whether your restaurant is currently accepting orders
+                          </FormDescription>
                         </div>
                         <FormControl>
                           <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -744,86 +443,48 @@ export function AccountSettingsForm({ initialProfile, initialSettings, userData 
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="acceptCardPayments"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel>Card Payments</FormLabel>
-                          <FormDescription>Accept credit/debit card payments online</FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          <TabsContent value="notifications" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Notification Preferences
-                </CardTitle>
-                <CardDescription>Choose how you want to receive notifications</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="emailNotifications"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Email Notifications</FormLabel>
-                        <FormDescription>Receive order notifications via email</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="smsNotifications"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>SMS Notifications</FormLabel>
-                        <FormDescription>Receive urgent notifications via SMS</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="orderNotifications"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Order Notifications</FormLabel>
-                        <FormDescription>Get notified about new orders immediately</FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </form>
-    </Form>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="deliveryFee"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Delivery Fee ($)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="minOrder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Minimum Order ($)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          <div className="flex justify-end">
+            <Button type="button" onClick={form.handleSubmit(onSubmit)} disabled={isLoading}>
+              {isLoading ? "Saving..." : "Save All Changes"}
+            </Button>
+          </div>
+        </div>
+      </Form>
+    </div>
   )
 }

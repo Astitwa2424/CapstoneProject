@@ -1,195 +1,171 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { revalidatePath } from "next/cache"
+import * as z from "zod"
 
-export interface RestaurantSettings {
-  restaurantName: string
-  description?: string
-  phone?: string
-  email?: string
-  address?: string
-  isOpen: boolean
-  acceptsOnlineOrders: boolean
-  acceptsReservations: boolean
-  enableNotifications: boolean
-  emailNotifications: boolean
-  smsNotifications: boolean
-  deliveryRadius: number
-  estimatedDeliveryTime: number
-  maxOrdersPerHour: number
+const accountFormSchema = z.object({
+  // Profile fields
+  name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
+  description: z.string().optional(),
+  streetAddress: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  phone: z.string().optional(),
+  cuisine: z.string().optional(),
+  website: z.string().url().optional().or(z.literal("")),
+  facebookUrl: z.string().url().optional().or(z.literal("")),
+  instagramUrl: z.string().url().optional().or(z.literal("")),
+  bannerImage: z.string().optional(),
 
-  // Operating Hours
-  monday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
-  tuesday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
-  wednesday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
-  thursday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
-  friday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
-  saturday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
-  sunday: {
-    isOpen: boolean
-    openTime: string
-    closeTime: string
-  }
+  // Business fields
+  businessRegistrationNumber: z.string().optional(),
+  taxId: z.string().optional(),
+  category: z.string().optional(),
+  operatingHours: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  bankName: z.string().optional(),
 
-  // Payment Settings
-  acceptCashOnDelivery: boolean
-  acceptCardPayments: boolean
+  // Settings fields
+  isOpen: z.boolean().default(false),
+  deliveryFee: z.coerce.number().min(0).default(0),
+  minOrder: z.coerce.number().min(0).default(0),
+})
 
-  // Security Settings
-  twoFactorEnabled: boolean
-  sessionTimeout: number
-}
+type AccountFormValues = z.infer<typeof accountFormSchema>
 
-export async function getRestaurantSettings(): Promise<{
-  success: boolean
-  settings?: RestaurantSettings
-  error?: string
-}> {
+export async function getRestaurantAccountData() {
   try {
     const session = await auth()
 
     if (!session?.user || session.user.role !== "RESTAURANT") {
-      return { success: false, settings: null }
+      return { success: false, error: "Unauthorized" }
     }
 
-    const restaurant = await prisma.restaurantProfile.findUnique({
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+    })
+
+    const restaurantProfile = await prisma.restaurantProfile.findUnique({
       where: { userId: session.user.id },
     })
 
+    // Default settings if no profile exists
+    const defaultSettings = {
+      acceptsOnlineOrders: true,
+      acceptsReservations: false,
+      deliveryRadius: 5,
+      deliveryFee: 0,
+      minOrderAmount: 0,
+      estimatedDeliveryTime: 30,
+      emailNotifications: true,
+      smsNotifications: false,
+      orderNotifications: true,
+      acceptCashOnDelivery: true,
+      acceptCardPayments: true,
+    }
+
     return {
       success: true,
-      settings: restaurant,
+      profile: restaurantProfile,
+      user,
+      settings: defaultSettings,
     }
   } catch (error) {
-    console.error("Error fetching restaurant settings:", error)
-    return { success: false, settings: null }
+    console.error("Error fetching restaurant account data:", error)
+    return { success: false, error: "Failed to fetch account data" }
   }
 }
 
-export async function updateRestaurantSettings(formData: FormData) {
+export async function updateRestaurantAccount(data: AccountFormValues) {
   try {
     const session = await auth()
 
     if (!session?.user || session.user.role !== "RESTAURANT") {
-      throw new Error("Unauthorized")
+      return { success: false, error: "Unauthorized" }
     }
 
-    const userId = session.user.id
+    const validatedData = accountFormSchema.parse(data)
 
-    // Extract settings data
-    const isOpen = formData.get("isOpen") === "true"
-    const acceptsOnlineOrders = formData.get("acceptsOnlineOrders") === "true"
-    const acceptsReservations = formData.get("acceptsReservations") === "true"
-    const enableNotifications = formData.get("enableNotifications") === "true"
-    const emailNotifications = formData.get("emailNotifications") === "true"
-    const smsNotifications = formData.get("smsNotifications") === "true"
-    const deliveryRadius = Number.parseFloat(formData.get("deliveryRadius") as string) || 5
-    const estimatedDeliveryTime = Number.parseInt(formData.get("estimatedDeliveryTime") as string) || 30
-    const maxOrdersPerHour = Number.parseInt(formData.get("maxOrdersPerHour") as string) || 20
+    // This line will be removed, as it incorrectly creates an array.
+    // const cuisineArray = validatedData.cuisine ? validatedData.cuisine.split(",").map((s) => s.trim()) : []
 
-    // Operating hours
-    const operatingHours = {
-      monday: {
-        isOpen: formData.get("monday_isOpen") === "true",
-        openTime: (formData.get("monday_openTime") as string) || "09:00",
-        closeTime: (formData.get("monday_closeTime") as string) || "22:00",
-      },
-      tuesday: {
-        isOpen: formData.get("tuesday_isOpen") === "true",
-        openTime: (formData.get("tuesday_openTime") as string) || "09:00",
-        closeTime: (formData.get("tuesday_closeTime") as string) || "22:00",
-      },
-      wednesday: {
-        isOpen: formData.get("wednesday_isOpen") === "true",
-        openTime: (formData.get("wednesday_openTime") as string) || "09:00",
-        closeTime: (formData.get("wednesday_closeTime") as string) || "22:00",
-      },
-      thursday: {
-        isOpen: formData.get("thursday_isOpen") === "true",
-        openTime: (formData.get("thursday_openTime") as string) || "09:00",
-        closeTime: (formData.get("thursday_closeTime") as string) || "22:00",
-      },
-      friday: {
-        isOpen: formData.get("friday_isOpen") === "true",
-        openTime: (formData.get("friday_openTime") as string) || "09:00",
-        closeTime: (formData.get("friday_closeTime") as string) || "22:00",
-      },
-      saturday: {
-        isOpen: formData.get("saturday_isOpen") === "true",
-        openTime: (formData.get("saturday_openTime") as string) || "09:00",
-        closeTime: (formData.get("saturday_closeTime") as string) || "22:00",
-      },
-      sunday: {
-        isOpen: formData.get("sunday_isOpen") === "true",
-        openTime: (formData.get("sunday_openTime") as string) || "09:00",
-        closeTime: (formData.get("sunday_closeTime") as string) || "22:00",
-      },
-    }
-
-    await prisma.restaurantProfile.upsert({
-      where: { userId },
-      update: {
-        isOpen,
-        operatingHours,
-        acceptsOnlineOrders,
-        acceptsReservations,
-        enableNotifications,
-        emailNotifications,
-        smsNotifications,
-        deliveryRadius,
-        estimatedDeliveryTime,
-        maxOrdersPerHour,
-      },
-      create: {
-        userId,
-        name: "Restaurant",
-        phone: "PENDING",
-        address: "PENDING",
-        cuisine: ["PENDING"],
-        isOpen,
-        operatingHours,
-        acceptsOnlineOrders,
-        acceptsReservations,
-        enableNotifications,
-        emailNotifications,
-        smsNotifications,
-        deliveryRadius,
-        estimatedDeliveryTime,
-        maxOrdersPerHour,
-      },
+    let restaurantProfile = await prisma.restaurantProfile.findUnique({
+      where: { userId: session.user.id },
     })
 
-    revalidatePath("/restaurant/dashboard/settings")
+    if (!restaurantProfile) {
+      // Create new restaurant profile
+      restaurantProfile = await prisma.restaurantProfile.create({
+        data: {
+          userId: session.user.id,
+          name: validatedData.name,
+          description: validatedData.description,
+          streetAddress: validatedData.streetAddress,
+          city: validatedData.city,
+          state: validatedData.state,
+          postalCode: validatedData.postalCode,
+          phone: validatedData.phone,
+          // FIX: Use the string directly
+          cuisine: validatedData.cuisine,
+          website: validatedData.website,
+          facebookUrl: validatedData.facebookUrl,
+          instagramUrl: validatedData.instagramUrl,
+          bannerImage: validatedData.bannerImage,
+          businessRegistrationNumber: validatedData.businessRegistrationNumber,
+          taxId: validatedData.taxId,
+          category: validatedData.category,
+          operatingHours: validatedData.operatingHours,
+          bankAccountNumber: validatedData.bankAccountNumber,
+          bankName: validatedData.bankName,
+          isOpen: validatedData.isOpen,
+          deliveryFee: validatedData.deliveryFee,
+          minOrder: validatedData.minOrder,
+        },
+      })
+    } else {
+      // Update existing restaurant profile
+      restaurantProfile = await prisma.restaurantProfile.update({
+        where: { id: restaurantProfile.id },
+        data: {
+          name: validatedData.name,
+          description: validatedData.description,
+          streetAddress: validatedData.streetAddress,
+          city: validatedData.city,
+          state: validatedData.state,
+          postalCode: validatedData.postalCode,
+          phone: validatedData.phone,
+          // FIX: Use the string directly
+          cuisine: validatedData.cuisine,
+          website: validatedData.website,
+          facebookUrl: validatedData.facebookUrl,
+          instagramUrl: validatedData.instagramUrl,
+          bannerImage: validatedData.bannerImage,
+          businessRegistrationNumber: validatedData.businessRegistrationNumber,
+          taxId: validatedData.taxId,
+          category: validatedData.category,
+          operatingHours: validatedData.operatingHours,
+          bankAccountNumber: validatedData.bankAccountNumber,
+          bankName: validatedData.bankName,
+          isOpen: validatedData.isOpen,
+          deliveryFee: validatedData.deliveryFee,
+          minOrder: validatedData.minOrder,
+        },
+      })
+    }
 
-    return { success: true, message: "Settings updated successfully!" }
+    revalidatePath("/restaurant/dashboard/account")
+    revalidatePath("/restaurant/dashboard/settings")
+    revalidatePath("/restaurant/dashboard")
+
+    return { success: true, message: "Account updated successfully" }
   } catch (error) {
-    console.error("Error updating restaurant settings:", error)
-    return { success: false, message: "Failed to update settings. Please try again." }
+    if (error instanceof z.ZodError) {
+      return { success: false, error: "Validation failed", issues: error.errors }
+    }
+    console.error("Error updating restaurant account:", error)
+    return { success: false, error: "Failed to update account" }
   }
 }

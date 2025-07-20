@@ -18,7 +18,9 @@ export async function addPaymentMethod(prevState: any, formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) return { error: "Not authenticated" }
 
-  const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: session.user.id } })
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId: session.user.id },
+  })
   if (!customerProfile) return { error: "Customer profile not found" }
 
   const validatedFields = addPaymentMethodSchema.safeParse({
@@ -85,7 +87,9 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
   const session = await auth()
   if (!session?.user?.id) return { success: false, error: "Not authenticated" }
 
-  const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: session.user.id } })
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId: session.user.id },
+  })
   if (!customerProfile) return { success: false, error: "Customer profile not found" }
 
   const validatedFields = placeOrderSchema.safeParse(data)
@@ -130,8 +134,6 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
       },
     })
 
-    // In a real app, you would confirm the payment with Stripe here.
-    // For this mock flow, we'll just mark it as paid.
     await prisma.order.update({
       where: { id: order.id },
       data: { paymentStatus: "PAID" },
@@ -145,13 +147,45 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
   }
 }
 
+export async function getCustomerOrders() {
+  const session = await auth()
+  if (!session?.user?.id) return []
+
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId: session.user.id },
+  })
+
+  if (!customerProfile) return []
+
+  try {
+    const orders = await prisma.order.findMany({
+      where: { customerProfileId: customerProfile.id },
+      include: {
+        restaurant: { select: { name: true, id: true } },
+        orderItems: {
+          include: {
+            menuItem: { select: { name: true, price: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+    return orders
+  } catch (error) {
+    console.error("Error fetching customer orders:", error)
+    return []
+  }
+}
+
 export async function getPaymentMethods() {
   const session = await auth()
   if (!session?.user?.id) return []
+
   const customerProfile = await prisma.customerProfile.findUnique({
     where: { userId: session.user.id },
     include: { paymentMethods: { orderBy: { createdAt: "desc" } } },
   })
+
   return customerProfile?.paymentMethods || []
 }
 
@@ -159,17 +193,31 @@ export async function getOrderDetails(orderId: string) {
   const session = await auth()
   if (!session?.user?.id) return null
 
-  const customerProfile = await prisma.customerProfile.findUnique({ where: { userId: session.user.id } })
+  const customerProfile = await prisma.customerProfile.findUnique({
+    where: { userId: session.user.id },
+    select: { id: true },
+  })
+
   if (!customerProfile) return null
 
-  return prisma.order.findFirst({
-    where: { id: orderId, customerProfileId: customerProfile.id },
-    include: {
-      orderItems: { include: { menuItem: true } },
-      restaurant: true,
-      customerProfile: { include: { user: true } },
-    },
-  })
+  try {
+    const order = await prisma.order.findUnique({
+      where: {
+        id: orderId,
+        customerProfileId: customerProfile.id,
+      },
+      include: {
+        orderItems: { include: { menuItem: true } },
+        restaurant: true,
+        customerProfile: { include: { user: true } },
+        driverProfile: true,
+      },
+    })
+    return order
+  } catch (error) {
+    console.error("Error fetching order:", error)
+    return null
+  }
 }
 
 export async function getRestaurantProfileById(id: string) {
@@ -179,12 +227,8 @@ export async function getRestaurantProfileById(id: string) {
       include: {
         menuItems: {
           where: { isActive: true },
-          include: {
-            modifications: true,
-          },
-          orderBy: {
-            name: "asc",
-          },
+          include: { modifications: true },
+          orderBy: { name: "asc" },
         },
       },
     })
@@ -198,12 +242,8 @@ export async function getRestaurantProfileById(id: string) {
 export async function getRestaurants() {
   try {
     const restaurants = await prisma.restaurantProfile.findMany({
-      where: {
-        isActive: true,
-      },
-      orderBy: {
-        name: "asc",
-      },
+      where: { isActive: true },
+      orderBy: { name: "asc" },
     })
     return restaurants
   } catch (error) {

@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { OrderStatus, type Modification, type MenuItem } from "@prisma/client"
-import {prisma} from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { getRestaurantIdFromSession } from "@/lib/auth-utils"
-import { emitToRestaurant } from "@/lib/socket-server"
+import { emitToRestaurant, emitSocketEvent } from "@/lib/socket-server"
 
 export type MenuItemWithModifications = MenuItem & {
   modifications: Modification[]
@@ -173,7 +173,7 @@ export async function getInitialOrders() {
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   const restaurantId = await getRestaurantIdFromSession()
   if (!restaurantId) {
-    throw new Error("Restaurant not found or user not authorized.")
+    return { success: false, error: "Restaurant not found or user not authorized." }
   }
 
   try {
@@ -185,7 +185,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     })
 
     if (!order) {
-      throw new Error("Order not found.")
+      return { success: false, error: "Order not found." }
     }
 
     const updatedOrder = await prisma.order.update({
@@ -221,14 +221,28 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
       }
       // Notify all clients in the restaurant's room about the status change
       await emitToRestaurant(restaurantId, "order_status_update", serializedOrder)
+
+      // Also notify the specific customer about their order update.
+      const customerUserId = fullUpdatedOrder.customerProfile.userId
+      if (customerUserId) {
+        const customerRoom = `user-${customerUserId}`
+        const notificationPayload = {
+          orderId: fullUpdatedOrder.id,
+          status: fullUpdatedOrder.status,
+          message: `Your order #${fullUpdatedOrder.id
+            .substring(0, 6)
+            .toUpperCase()} is now ${fullUpdatedOrder.status.replace(/_/g, " ").toLowerCase()}.`,
+        }
+        await emitSocketEvent(customerRoom, "order_notification", notificationPayload)
+      }
     }
 
     revalidatePath("/restaurant/dashboard/orders")
     revalidatePath("/restaurant/dashboard/dockets")
-    return updatedOrder
+    return { success: true, order: updatedOrder }
   } catch (error) {
     console.error("Failed to update order status:", error)
-    throw new Error("Database error.")
+    return { success: false, error: "Database error." }
   }
 }
 

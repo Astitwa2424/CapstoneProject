@@ -1,105 +1,100 @@
 "use client"
 
-import { useState } from "react"
-import { CheckCircle, CookingPot, Bike, Home, Loader2 } from "lucide-react"
+import { Truck, ChefHat, PackageCheck, Home, Check } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { OrderStatus } from "@prisma/client"
-
-const statusConfig = {
-  PENDING: { index: 0, text: "Order Pending", icon: Loader2, color: "text-gray-500" },
-  NEW: { index: 1, text: "Order Placed", icon: CheckCircle, color: "text-green-500" },
-  ACCEPTED: { index: 1, text: "Order Accepted", icon: CheckCircle, color: "text-green-500" },
-  PREPARING: { index: 2, text: "Preparing Food", icon: CookingPot, color: "text-yellow-500" },
-  READY_FOR_PICKUP: { index: 3, text: "Ready for Pickup", icon: Bike, color: "text-blue-500" },
-  OUT_FOR_DELIVERY: { index: 3, text: "Out for Delivery", icon: Bike, color: "text-blue-500" },
-  DELIVERED: { index: 4, text: "Delivered", icon: Home, color: "text-purple-500" },
-  CANCELLED: { index: -1, text: "Cancelled", icon: CheckCircle, color: "text-red-500" },
-  FAILED: { index: -1, text: "Failed", icon: CheckCircle, color: "text-red-500" },
-}
-
-const steps = [
-  { text: "Order Placed", icon: CheckCircle },
-  { text: "Preparing Food", icon: CookingPot },
-  { text: "Out for Delivery", icon: Bike },
-  { text: "Delivered", icon: Home },
-]
+import DeliveryMap from "./delivery-map"
 
 interface LiveTrackingProps {
   orderStatus: OrderStatus
+  driverLocation: { lat: number; lng: number } | null
+  restaurantLocation: { lat: number; lng: number }
+  customerAddress: string
 }
 
-export default function LiveTracking({ orderStatus }: LiveTrackingProps) {
-  const [currentStatus, setCurrentStatus] = useState<OrderStatus>(orderStatus)
-  const currentStepIndex = statusConfig[currentStatus]?.index ?? 0
+const statusSteps = [
+  { status: "PENDING", label: "Order Placed", icon: PackageCheck },
+  { status: "PREPARING", label: "Preparing", icon: ChefHat },
+  { status: "READY_FOR_PICKUP", label: "Ready for Pickup", icon: Truck },
+  { status: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: Truck },
+  { status: "DELIVERED", label: "Delivered", icon: Home },
+]
 
-  // In a real app, you'd use WebSockets (like Socket.IO) to update the status in real-time.
-  // useEffect(() => {
-  //   const socket = io("...");
-  //   socket.on("orderStatusUpdate", (newStatus) => {
-  //     setCurrentStatus(newStatus);
-  //   });
-  //   return () => socket.disconnect();
-  // }, []);
+const statusOrder: OrderStatus[] = ["PENDING", "PREPARING", "READY_FOR_PICKUP", "OUT_FOR_DELIVERY", "DELIVERED"]
+
+export default function LiveTracking({
+  orderStatus,
+  driverLocation,
+  restaurantLocation,
+  customerAddress,
+}: LiveTrackingProps) {
+  const currentStatusIndex = statusOrder.indexOf(orderStatus)
+
+  const showMap =
+    currentStatusIndex >= statusOrder.indexOf("READY_FOR_PICKUP") &&
+    currentStatusIndex < statusOrder.indexOf("DELIVERED")
 
   return (
-    <div className="bg-white p-8 rounded-xl shadow-lg">
-      <h2 className="text-2xl font-bold mb-2">Track Your Order</h2>
-      <p className="text-muted-foreground mb-8">
-        Current Status:{" "}
-        <span className={`font-semibold ${statusConfig[currentStatus]?.color}`}>
-          {statusConfig[currentStatus]?.text}
-        </span>
-      </p>
+    <div className="w-full">
+      <div className="relative h-96 mb-8 bg-gray-200 rounded-lg overflow-hidden shadow-md">
+        {showMap ? (
+          <DeliveryMap
+            driverLocation={driverLocation}
+            restaurantLocation={restaurantLocation}
+            customerAddress={customerAddress}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-muted-foreground">Map will appear here once the order is on its way.</p>
+          </div>
+        )}
+      </div>
 
-      <div className="relative">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold tracking-tight">Track your order</h2>
+        <p className="text-muted-foreground">Follow your meal from the kitchen to your door.</p>
+      </div>
+
+      <div className="relative w-full">
         {/* Progress Bar */}
-        <div className="absolute left-6 top-0 h-full w-1 bg-gray-200 rounded-full" />
-        <div
-          className="absolute left-6 top-0 h-full w-1 bg-primary rounded-full transition-all duration-500"
-          style={{ height: `${(currentStepIndex / (steps.length - 1)) * 100}%` }}
-        />
+        <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-200">
+          <div
+            className="h-full bg-gray-800 transition-all duration-500"
+            style={{ width: `${(currentStatusIndex / (statusSteps.length - 2)) * 100}%` }}
+          />
+        </div>
 
-        {/* Steps */}
-        <div className="space-y-12">
-          {steps.map((step, index) => {
-            const isActive = index <= currentStepIndex
-            const isCurrent = index === currentStepIndex
-            const Icon = step.icon
+        {/* Status Steps */}
+        <div className="relative flex justify-between">
+          {statusSteps.map((step, index) => {
+            if (step.status === "READY_FOR_PICKUP" && orderStatus !== "READY_FOR_PICKUP") return null
+            if (step.status === "PREPARING" && orderStatus === "READY_FOR_PICKUP") return null
+
+            const stepIndex = statusOrder.indexOf(step.status as OrderStatus)
+            const isActive = stepIndex <= currentStatusIndex
+            const isCurrent = stepIndex === currentStatusIndex
 
             return (
-              <div key={index} className="flex items-center z-10 relative">
+              <div key={step.status} className="flex flex-col items-center text-center w-24 z-10 bg-background">
                 <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    isActive ? "bg-primary text-white" : "bg-gray-200 text-gray-500"
-                  }`}
+                  className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500",
+                    isActive ? "bg-gray-900 border-gray-900 text-white" : "bg-white border-gray-300 text-gray-400",
+                  )}
                 >
-                  <Icon className={`w-6 h-6 ${isCurrent ? "animate-pulse" : ""}`} />
+                  {currentStatusIndex > stepIndex ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
                 </div>
-                <div className="ml-6">
-                  <h3 className={`text-lg font-semibold ${isActive ? "text-gray-900" : "text-gray-500"}`}>
-                    {step.text}
-                  </h3>
-                  {isCurrent && <p className="text-sm text-muted-foreground">Estimated arrival: 10-15 mins</p>}
-                </div>
+                <p
+                  className={cn(
+                    "mt-2 text-xs sm:text-sm font-medium",
+                    isCurrent ? "text-gray-900" : "text-muted-foreground",
+                  )}
+                >
+                  {step.label}
+                </p>
               </div>
             )
           })}
-        </div>
-      </div>
-
-      <div className="mt-12 border-t pt-6">
-        <h3 className="font-semibold mb-4">Your Driver</h3>
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
-            <img src="/placeholder.svg?width=64&height=64" alt="Driver" className="rounded-full" />
-          </div>
-          <div>
-            <p className="font-medium">Alex Johnson</p>
-            <p className="text-sm text-muted-foreground">Honda Civic - ABC 123</p>
-            <p className="text-sm text-yellow-500">★★★★☆ 4.8</p>
-          </div>
-          <div className="ml-auto">
-            <button className="p-3 rounded-full bg-gray-100 hover:bg-gray-200">📞</button>
-          </div>
         </div>
       </div>
     </div>

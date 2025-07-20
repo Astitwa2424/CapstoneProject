@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { updateRestaurantProfile } from "@/app/restaurant/profile/actions"
 import { Loader2 } from "lucide-react"
+import { BannerImageUpload } from "@/components/ui/banner-image-upload"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
@@ -30,6 +31,7 @@ const formSchema = z.object({
   bankAccountNumber: z.string().optional(),
   bankName: z.string().optional(),
   swiftCode: z.string().optional(),
+  bannerImage: z.string().optional(),
 })
 
 interface RestaurantProfileFormProps {
@@ -57,6 +59,7 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
       bankAccountNumber: initialData?.bankAccountNumber || "",
       bankName: initialData?.bankName || "",
       swiftCode: initialData?.swiftCode || "",
+      bannerImage: initialData?.bannerImage || "",
     },
   })
 
@@ -188,6 +191,28 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
                 )}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Banner Image */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Restaurant Banner</CardTitle>
+            <CardDescription>Upload a banner image for your restaurant page</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FormField
+              control={form.control}
+              name="bannerImage"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <BannerImageUpload value={field.value} onChange={field.onChange} disabled={isSubmitting} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
         </Card>
 
