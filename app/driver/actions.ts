@@ -1,146 +1,200 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { auth } from "@/lib/auth"
 import { getDriverProfileIdFromSession } from "@/lib/auth-utils"
 import { prisma } from "@/lib/prisma"
 import { emitSocketEvent } from "@/lib/socket-server"
+import { OrderStatus } from "@prisma/client"
+import { revalidatePath } from "next/cache"
 
-export async function getDriverDashboardData() {
-  const driverProfileId = await getDriverProfileIdFromSession()
-  if (!driverProfileId) {
-    throw new Error("Driver not authenticated")
+export async function getDriverProfile() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return null
   }
 
-  const driver = await prisma.driverProfile.findUnique({
-    where: { id: driverProfileId },
-  })
-
-  // Find the driver's current active order
-  const activeOrder = await prisma.order.findFirst({
+  const driverProfile = await prisma.driverProfile.findUnique({
     where: {
-      driverProfileId,
-      status: { in: ["OUT_FOR_DELIVERY"] },
+      userId: session.user.id,
     },
-    include: { restaurant: true, customerProfile: { include: { user: true } } },
+    include: {
+      user: true,
+    },
   })
 
-  // Find orders that are ready for pickup and not yet assigned to any driver
-  const availableOrders = await prisma.order.findMany({
-    where: {
-      status: "READY_FOR_PICKUP",
-      driverProfileId: null,
-    },
-    include: { restaurant: true },
-    orderBy: { createdAt: "asc" },
-  })
-
-  return { driver, activeOrder, availableOrders }
+  return driverProfile
 }
 
-export async function toggleAvailability(isAvailable: boolean) {
+export async function getDriverDashboardStats() {
   const driverProfileId = await getDriverProfileIdFromSession()
   if (!driverProfileId) {
-    return { success: false, error: "Authentication failed." }
+    return null
   }
 
-  await prisma.driverProfile.update({
-    where: { id: driverProfileId },
-    data: { isAvailable },
-  })
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
-  revalidatePath("/driver/dashboard")
-  return { success: true, isAvailable }
+  const [todaysDeliveries, totalDeliveries, ratings] = await Promise.all([
+    prisma.order.count({
+      where: {
+        driverProfileId,
+        status: OrderStatus.DELIVERED,
+        updatedAt: {
+          gte: startOfToday,
+        },
+      },
+    }),
+    prisma.order.count({
+      where: {
+        driverProfileId,
+        status: OrderStatus.DELIVERED,
+      },
+    }),
+    prisma.review.findMany({
+      where: {
+        driverProfileId,
+        rating: { not: null },
+      },
+      select: {
+        rating: true,
+      },
+    }),
+  ])
+
+  const totalRating = ratings.reduce((acc, r) => acc + (r.rating || 0), 0)
+  const averageRating = ratings.length > 0 ? (totalRating / ratings.length).toFixed(1) : "N/A"
+
+  const todaysEarnings = (todaysDeliveries * 5).toFixed(2) // Assuming a flat $5 delivery fee per order
+
+  return {
+    todaysEarnings,
+    completedDeliveries: totalDeliveries,
+    averageRating,
+    activeHours: "N/A", // Placeholder
+  }
+}
+
+export async function getAvailableOrders() {
+  const orders = await prisma.order.findMany({
+    where: {
+      status: OrderStatus.READY_FOR_PICKUP,
+      driverProfileId: null, // Only fetch orders that don't have a driver yet
+    },
+    include: {
+      restaurant: {
+        include: {
+          user: true,
+        },
+      },
+      customerProfile: true,
+      orderItems: {
+        include: {
+          menuItem: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  })
+  return orders
 }
 
 export async function acceptOrder(orderId: string) {
   const driverProfileId = await getDriverProfileIdFromSession()
   if (!driverProfileId) {
-    return { success: false, error: "Authentication failed." }
+    throw new Error("Driver not found")
   }
 
-  try {
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId, driverProfileId: null }, // Ensure we don't snatch an already taken order
-      data: {
-        driverProfileId,
-        status: "OUT_FOR_DELIVERY",
-      },
-      include: {
-        customerProfile: true,
-      },
-    })
-
-    // Notify customer that their order is on the way
-    const customerRoom = `user-${updatedOrder.customerProfile.userId}`
-    await emitSocketEvent(customerRoom, "order_notification", {
-      orderId: updatedOrder.id,
-      status: "OUT_FOR_DELIVERY",
-      message: "Your driver is on the way!",
-    })
-    // Also notify all drivers so the order is removed from their available list
-    await emitSocketEvent("drivers", "order_accepted", { orderId: updatedOrder.id })
-
-    revalidatePath("/driver/dashboard")
-    return { success: true, order: updatedOrder }
-  } catch (error) {
-    console.error("Failed to accept order:", error)
-    return { success: false, error: "Order may have already been taken." }
-  }
-}
-
-export async function updateDriverLocation(latitude: number, longitude: number) {
-  const driverProfileId = await getDriverProfileIdFromSession()
-  if (!driverProfileId) return
-
-  const driver = await prisma.driverProfile.update({
-    where: { id: driverProfileId },
-    data: { latitude, longitude },
+  const order = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      driverProfileId: driverProfileId,
+      status: OrderStatus.OUT_FOR_DELIVERY,
+    },
   })
 
+  // Notify customer and restaurant
+  emitSocketEvent(order.customerProfileId, "order-update", order)
+  emitSocketEvent(order.restaurantId, "order-update", order)
+
+  revalidatePath("/driver/dashboard")
+  revalidatePath(`/customer/order/${orderId}/track`)
+}
+
+export async function updateDriverLocation(lat: number, lng: number) {
+  const driverProfileId = await getDriverProfileIdFromSession()
+  if (!driverProfileId) {
+    return
+  }
+
+  await prisma.driverProfile.update({
+    where: { id: driverProfileId },
+    data: {
+      latitude: lat,
+      longitude: lng,
+    },
+  })
+
+  // Find active order to notify customer
   const activeOrder = await prisma.order.findFirst({
     where: {
-      driverProfileId: driver.id,
-      status: "OUT_FOR_DELIVERY",
+      driverProfileId,
+      status: OrderStatus.OUT_FOR_DELIVERY,
     },
-    select: { id: true, customerProfile: { select: { userId: true } } },
   })
 
   if (activeOrder) {
-    const customerRoom = `user-${activeOrder.customerProfile.userId}`
-    await emitSocketEvent(customerRoom, "driver_location_update", {
+    emitSocketEvent(activeOrder.customerProfileId, "driver-location-update", {
       orderId: activeOrder.id,
-      lat: latitude,
-      lng: longitude,
+      lat,
+      lng,
     })
   }
 }
 
-export async function completeDelivery(orderId: string) {
+export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   const driverProfileId = await getDriverProfileIdFromSession()
   if (!driverProfileId) {
-    return { success: false, error: "Authentication failed." }
+    throw new Error("Driver not found")
   }
-  const order = await prisma.order.findFirst({
+
+  const order = await prisma.order.update({
     where: { id: orderId, driverProfileId },
-    include: { customerProfile: true },
+    data: {
+      status,
+    },
   })
 
-  if (!order) {
-    return { success: false, error: "Order not found." }
+  // Notify customer and restaurant
+  emitSocketEvent(order.customerProfileId, "order-update", order)
+  emitSocketEvent(order.restaurantId, "order-update", order)
+
+  revalidatePath("/driver/dashboard")
+  revalidatePath(`/customer/order/${orderId}/track`)
+}
+
+export async function toggleDriverAvailability() {
+  const driverProfileId = await getDriverProfileIdFromSession()
+  if (!driverProfileId) {
+    throw new Error("Driver not found")
   }
 
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: { status: "DELIVERED" },
+  const driverProfile = await prisma.driverProfile.findUnique({
+    where: { id: driverProfileId },
   })
 
-  const customerRoom = `user-${order.customerProfile.userId}`
-  await emitSocketEvent(customerRoom, "order_notification", {
-    orderId: updatedOrder.id,
-    status: "DELIVERED",
-    message: "Your order has been delivered! Enjoy your meal.",
+  if (!driverProfile) {
+    throw new Error("Driver profile not found")
+  }
+
+  const updatedProfile = await prisma.driverProfile.update({
+    where: { id: driverProfileId },
+    data: {
+      isAvailable: !driverProfile.isAvailable,
+    },
   })
 
   revalidatePath("/driver/dashboard")
-  return { success: true }
+  return updatedProfile.isAvailable
 }

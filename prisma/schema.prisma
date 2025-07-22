@@ -97,6 +97,7 @@ model CustomerProfile {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders         Order[]
   paymentMethods PaymentMethod[]
+  reviews        Review[]
 
   @@map("customer_profiles")
 }
@@ -116,8 +117,9 @@ model DriverProfile {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders Order[]
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders  Order[]
+  reviews Review[]
 
   @@map("driver_profiles")
 }
@@ -158,6 +160,7 @@ model RestaurantProfile {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   menuItems MenuItem[]
   orders    Order[]
+  reviews   Review[]
 
   @@map("restaurant_profiles")
 }
@@ -221,6 +224,7 @@ model Order {
   driverProfile         DriverProfile?     @relation(fields: [driverProfileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   paymentMethod         PaymentMethod?     @relation(fields: [paymentMethodId], references: [id], onUpdate: NoAction, onDelete: NoAction)
   orderItems            OrderItem[]
+  reviews               Review[]
 
   @@map("orders")
 }
@@ -258,4 +262,23 @@ model PaymentMethod {
   orders            Order[]
 
   @@map("payment_methods")
+}
+
+model Review {
+  id                String   @id @default(cuid())
+  orderId           String   @map("order_id")
+  customerProfileId String   @map("customer_profile_id")
+  driverProfileId   String?  @map("driver_profile_id")
+  restaurantId      String?  @map("restaurant_id")
+  rating            Int?     @db.SmallInt
+  comment           String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerProfile   CustomerProfile    @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  driverProfile     DriverProfile?     @relation(fields: [driverProfileId], references: [id], onDelete: SetNull)
+  restaurant        RestaurantProfile? @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
+
+  @@map("reviews")
 }
