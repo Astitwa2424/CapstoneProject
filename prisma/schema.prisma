@@ -103,19 +103,27 @@ model CustomerProfile {
 }
 
 model DriverProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique @map("user_id")
-  licenseNumber   String?  @unique @map("license_number")
-  vehicleType     String?  @map("vehicle_type")
-  vehicleModel    String?  @map("vehicle_model")
-  plateNumber     String?  @map("plate_number")
-  isAvailable     Boolean  @default(false) @map("is_available")
-  latitude        Float?
-  longitude       Float?
-  rating          Float    @default(0.0)
-  totalDeliveries Int      @default(0) @map("total_deliveries")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                 String    @id @default(cuid())
+  userId             String    @unique @map("user_id")
+  phone              String?
+  dateOfBirth        DateTime? @map("date_of_birth")
+  address            String?
+  licenseNumber      String?   @unique @map("license_number")
+  vehicleType        String?   @map("vehicle_type")
+  vehicleModel       String?   @map("vehicle_model")
+  plateNumber        String?   @map("plate_number")
+  registrationNumber String?   @map("registration_number")
+  bankAccount        String?   @map("bank_account")
+  routingNumber      String?   @map("routing_number")
+  profileImage       String?   @map("profile_image")
+  vehiclePhotos      Json?     @map("vehicle_photos")
+  isAvailable        Boolean   @default(false) @map("is_available")
+  latitude           Float?
+  longitude          Float?
+  rating             Float     @default(0.0)
+  totalDeliveries    Int       @default(0) @map("total_deliveries")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders  Order[]

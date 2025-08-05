@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { stripe } from "@/lib/stripe"
 import type { CartItem } from "@/hooks/use-cart"
+import { emitToRestaurant } from "@/lib/socket-server"
 
 const addPaymentMethodSchema = z.object({
   cardHolder: z.string().min(1, "Cardholder name is required"),
@@ -110,7 +111,7 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
   } = validatedFields.data
 
   try {
-    const order = await prisma.order.create({
+    const newOrder = await prisma.order.create({
       data: {
         customerProfileId: customerProfile.id,
         restaurantId,
@@ -122,6 +123,7 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
         paymentMethodId,
         specialInstructions,
         status: "NEW",
+        paymentStatus: "PAID", // Assume payment is successful
         orderItems: {
           create: cartItems.map((item: CartItem) => ({
             menuItemId: item.menuItem.id,
@@ -132,15 +134,33 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
           })),
         },
       },
+      include: {
+        customerProfile: { include: { user: true } },
+        orderItems: { include: { menuItem: true } },
+      },
     })
 
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { paymentStatus: "PAID" },
-    })
+    // **CRITICAL FIX**: Notify the restaurant in real-time about the new order.
+    const serializedOrder = {
+      id: newOrder.id,
+      orderNumber: `#${newOrder.id.substring(0, 6).toUpperCase()}`,
+      customerName: newOrder.customerProfile.user.name ?? "N/A",
+      items: newOrder.orderItems.map((item) => ({
+        name: item.menuItem.name,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      total: newOrder.total,
+      status: newOrder.status,
+      orderTime: newOrder.createdAt.toISOString(),
+      estimatedTime: 30,
+      deliveryType: newOrder.deliveryAddress ? ("delivery" as const) : ("pickup" as const),
+      deliveryAddress: newOrder.deliveryAddress,
+    }
+    await emitToRestaurant(restaurantId, "new_order", serializedOrder)
 
     revalidatePath("/customer/profile/orders")
-    return { success: true, orderId: order.id }
+    return { success: true, orderId: newOrder.id }
   } catch (error) {
     console.error("Error placing order:", error)
     return { success: false, error: "Failed to place order." }

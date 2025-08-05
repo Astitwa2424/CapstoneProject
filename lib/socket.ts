@@ -1,52 +1,32 @@
-import { io, type Socket } from "socket.io-client"
+"use client"
+
 import type { Server } from "socket.io"
 
-let socket: Socket | null = null
+// --- Server-side Socket Instance Management ---
+// This part is for your API routes to access and emit events.
 let ioInstance: Server | null = null
 
-// Client-side socket instance
-export const getSocket = () => {
-  if (!socket) {
-    // The `as any` is a workaround for the server/client environment detection in Next.js
-    socket = io(undefined as any, {
-      path: "/api/socket.io",
-      addTrailingSlash: false,
-    })
-
-    socket.on("connect", () => {
-      console.log("Socket connected:", socket?.id)
-    })
-
-    socket.on("disconnect", () => {
-      console.log("Socket disconnected")
-    })
-  }
-  return socket
-}
-
-// Server-side socket instance management
 export const setSocketIo = (io: Server) => {
   if (!ioInstance) {
     ioInstance = io
+    console.log("Socket.IO server instance has been set.")
   }
 }
 
-export const getSocketIo = () => {
+export const getSocketIo = (): Server | null => {
   if (!ioInstance) {
-    console.error("Socket.IO server instance has not been initialized.")
-    // In a real app, you might throw an error or have a more robust way
-    // to ensure the instance is available.
+    // This is a common scenario in dev with hot-reloading, so a warning is better than an error.
+    console.warn("getSocketIo called before Socket.IO server was initialized.")
   }
   return ioInstance
 }
 
-// Server-side emitter function
-export const emitToRestaurant = (restaurantId: string, event: string, data: any) => {
+export const emitToRoom = (room: string, event: string, data: any) => {
   const io = getSocketIo()
   if (io) {
-    io.to(restaurantId).emit(event, data)
-    console.log(`Emitted '${event}' to room ${restaurantId}`)
+    io.to(room).emit(event, data)
+    console.log(`Emitted '${event}' to room '${room}'`)
   } else {
-    console.error(`Could not emit '${event}' to room ${restaurantId}: Socket.IO not available.`)
+    console.error(`Could not emit '${event}' to room '${room}': Socket.IO server instance not available.`)
   }
 }

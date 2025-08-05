@@ -1,30 +1,50 @@
-import { getDriverProfile, getDriverDashboardStats, getAvailableOrders } from "@/app/driver/actions"
-import { DriverDashboardClient } from "@/components/driver/driver-dashboard-client"
-import { Suspense } from "react"
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
+import { auth } from "@/lib/auth"
+import { UserRole } from "@prisma/client"
+import { DriverDashboardContent } from "@/components/driver/driver-dashboard-content"
+import { getInitialDriverData } from "@/app/driver/actions"
+
+export const metadata: Metadata = {
+  title: "Driver Dashboard",
+  description: "Manage your deliveries and driver profile",
+}
 
 export default async function DriverDashboard() {
-  const [driverProfile, stats, availableOrders] = await Promise.all([
-    getDriverProfile(),
-    getDriverDashboardStats(),
-    getAvailableOrders(),
-  ])
+  const session = await auth()
 
-  if (!driverProfile) {
+  if (!session?.user) {
+    redirect("/auth/driver/signin")
+  }
+
+  if (session.user.role !== UserRole.DRIVER) {
+    redirect("/auth/unauthorized")
+  }
+
+  // Fetch initial driver data
+  const { driver, stats, orders } = await getInitialDriverData()
+
+  if (!driver) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Driver Profile Not Found</h1>
-          <p className="text-gray-600">Please complete your driver profile setup.</p>
+          <h1 className="text-2xl font-bold mb-2">Driver Profile Not Found</h1>
+          <p className="text-gray-400">Please complete your driver profile setup.</p>
         </div>
       </div>
     )
   }
 
+  const initialStats = stats || {
+    todaysEarnings: "0.00",
+    completedDeliveries: 0,
+    averageRating: "N/A",
+    activeHours: "N/A",
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Suspense fallback={<div className="animate-pulse bg-gray-200 h-screen" />}>
-        <DriverDashboardClient driverProfile={driverProfile} initialStats={stats} initialOrders={availableOrders} />
-      </Suspense>
-    </div>
+    <main className="flex flex-1 flex-col">
+      <DriverDashboardContent initialDriver={driver} initialStats={initialStats} initialOrders={orders} />
+    </main>
   )
 }

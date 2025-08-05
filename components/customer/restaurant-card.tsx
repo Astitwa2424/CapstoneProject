@@ -27,37 +27,45 @@ export function RestaurantCard({ restaurant, featured = false }: RestaurantCardP
     ? "group cursor-pointer hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
     : "group cursor-pointer hover:shadow-md transition-all duration-200"
 
-  // Use bannerImage if available, otherwise fall back to image, then placeholder
-  const displayImage = restaurant.bannerImage || restaurant.image || "/placeholder.svg?height=200&width=400"
+  const displayImage =
+    restaurant.bannerImage ||
+    restaurant.image ||
+    `/placeholder.svg?width=400&height=200&text=${encodeURIComponent(restaurant.name)}`
 
   return (
-    <Link href={`/customer/restaurant/${restaurant.id}`}>
+    <Link href={`/customer/restaurant/${restaurant.id}`} className="block">
       <Card className={cardClass}>
         <div className="relative">
           <img
             src={displayImage || "/placeholder.svg"}
             alt={restaurant.name}
+            width={400}
+            height={200}
             className={`w-full object-cover rounded-t-lg ${featured ? "h-48" : "h-40"}`}
           />
-          <Button variant="ghost" size="icon" className="absolute top-2 right-2 bg-white/80 hover:bg-white">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 bg-white/80 hover:bg-white rounded-full"
+          >
             <Heart className="w-4 h-4" />
           </Button>
           {restaurant.deliveryFee === 0 && (
-            <Badge className="absolute top-2 left-2 bg-green-600 text-white">Free Delivery</Badge>
+            <Badge className="absolute top-2 left-2 bg-green-600 text-white border-none">Free Delivery</Badge>
           )}
         </div>
-        <CardContent className="p-4">
+        <CardContent className="p-4 bg-card">
           <div className="flex items-start justify-between mb-2">
-            <h3 className={`font-semibold text-gray-900 ${featured ? "text-lg" : "text-base"}`}>{restaurant.name}</h3>
+            <h3 className={`font-semibold text-foreground ${featured ? "text-lg" : "text-base"}`}>{restaurant.name}</h3>
             <div className="flex items-center space-x-1">
               <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-              <span className="text-sm font-medium">{restaurant.rating || 4.5}</span>
+              <span className="text-sm font-medium text-foreground">{restaurant.rating || 4.5}</span>
             </div>
           </div>
 
-          <p className="text-sm text-gray-600 mb-2">{restaurant.cuisine || "Various"}</p>
+          <p className="text-sm text-muted-foreground mb-2">{restaurant.cuisine || "Various"}</p>
 
-          <div className="flex items-center justify-between text-sm text-gray-500">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center space-x-1">
               <Clock className="w-4 h-4" />
               <span>{restaurant.deliveryTime || "25-40 min"}</span>

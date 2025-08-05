@@ -1,124 +1,139 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { MapContainer, TileLayer, Marker, Polyline } from "react-leaflet"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
-import { updateDriverLocation } from "@/app/driver/actions"
-import { useSocket } from "@/components/providers/socket-provider"
+import { useState, useCallback, useMemo } from "react"
+import { GoogleMap, useLoadScript, Marker, DirectionsService, DirectionsRenderer } from "@react-google-maps/api"
+import { RouteInfoBox } from "./route-info-box"
+import type { google } from "googlemaps"
 
-// Define custom icons
-const driverIcon = new L.Icon({
-  iconUrl:
-    "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLXRydWNrIj48cGF0aCBkPSJNMTQgMTZIMmEyIDIgMCAwIDEgLTItMlY0YTIgMiAwIDAgMSAyLTJoMTEuMThhMiAyIDAgMCAxIDEuNDEuNTlMMjIgMTIuODJWMTZhMiAyIDAgMCAxLTIgMnoiLz48cGF0aCBkPSJNMjIgMTZIMThhMiAyIDAgMCAxLTItMlY0YTIgMiAwIDAgMSAyLTJoMi4yOEExIDEgMCAwIDEgMjQgNVYxNWExIDEgMCAwIDEtMSAyLjcyeiIvPjxwYXRoIGQ9Ik0xMyA2djEwIi8+PGNpcmNsZSBjeD0iNyIgY3k9MTgiIHI9IjIiLz48Y2lyY2xlIGN4PSIxNyIgY3k9MTgiIHI9IjIiLz48L3N2Zz4=",
-  iconSize: [38, 38],
-  iconAnchor: [19, 19],
-})
-
-const restaurantIcon = new L.Icon({
-  iconUrl:
-    "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLXV0ZW5zaWxzIj48cGF0aCBkPSJNMzIgNnYxMWEyIDIgMCAwIDEgLTIgMkg3YTIgMiAwIDAgMSAtMiAtMlY2Ii8+PHBhdGggZD0iTTcgNlY0YTIgMiAwIDAgMSAyIC0yaDRhMiAyIDAgMCAxIDIgMnYyIi8+PHBhdGggZD0iTTIgMTJoMjAiLz48L3N2Zz4=",
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-})
-
-const customerIcon = new L.Icon({
-  iconUrl:
-    "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLWhvbWUiPjxwYXRoIGQ9Im0zIDkgOS03IDkgN3YxMWEyIDIgMCAwIDEtMiAySDVhMiAyIDAgMCAxLTItMnoiLz48cG9seWxpbmUgcG9pbnRzPSI5IDIyIDkgMTIgMTUgMTIgMTUgMjIiLz48L3N2Zz4=",
-  iconSize: [30, 30],
-  iconAnchor: [15, 15],
-})
-
-const DriverMap = () => {
-  const [position, setPosition] = useState<[number, number] | null>(null)
-  const [activeOrder, setActiveOrder] = useState<any>(null)
-  const { socket } = useSocket()
-
-  useEffect(() => {
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newPosition: [number, number] = [pos.coords.latitude, pos.coords.longitude]
-        setPosition(newPosition)
-        updateDriverLocation(newPosition[0], newPosition[1])
-      },
-      (err) => {
-        console.error(err)
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 0,
-      },
-    )
-
-    return () => {
-      navigator.geolocation.clearWatch(watchId)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!socket) return
-
-    socket.on("order-update", (order) => {
-      if (order.status === "OUT_FOR_DELIVERY") {
-        setActiveOrder(order)
-      } else if (order.status === "DELIVERED") {
-        setActiveOrder(null)
-      }
-    })
-
-    return () => {
-      socket.off("order-update")
-    }
-  }, [socket])
-
-  const center = useMemo(() => {
-    return position || [51.505, -0.09] // Default to London if no position
-  }, [position])
-
-  if (!position) {
-    return (
-      <div className="flex items-center justify-center h-full bg-gray-100 rounded-lg">
-        <p className="text-muted-foreground">Getting your location...</p>
-      </div>
-    )
-  }
-
-  return (
-    <MapContainer
-      center={center}
-      zoom={15}
-      style={{ height: "100%", width: "100%", borderRadius: "0.5rem" }}
-      scrollWheelZoom={false}
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      />
-      <Marker position={position} icon={driverIcon} />
-      {activeOrder && (
-        <>
-          <Marker
-            position={[activeOrder.restaurantProfile.lat, activeOrder.restaurantProfile.lng]}
-            icon={restaurantIcon}
-          />
-          <Marker position={[activeOrder.customerLat, activeOrder.customerLng]} icon={customerIcon} />
-          <Polyline
-            positions={[position, [activeOrder.restaurantProfile.lat, activeOrder.restaurantProfile.lng]]}
-            color="orange"
-            dashArray="5, 10"
-          />
-          <Polyline
-            positions={[
-              [activeOrder.restaurantProfile.lat, activeOrder.restaurantProfile.lng],
-              [activeOrder.customerLat, activeOrder.customerLng],
-            ]}
-            color="blue"
-          />
-        </>
-      )}
-    </MapContainer>
-  )
+// Map container style
+const containerStyle = {
+  width: "100%",
+  height: "100%",
+  minHeight: "400px",
+  borderRadius: "0.5rem",
 }
 
-export default DriverMap
+// Custom map styles for a professional theme
+const mapStyles = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#bdbdbd" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#dadada" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+  { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#e5e5e5" }] },
+  { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#eeeeee" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9c9c9" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#9e9e9e" }] },
+]
+
+// Custom SVG icons for map markers
+const createMarkerIcon = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+
+const driverIcon = createMarkerIcon(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#1e88e5" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.28a1 1 0 0 0-.684-.948l-1.923-.641a1 1 0 0 1-.578-.502l-1.539-3.076A1 1 0 0 0 16.382 8H14"/><path d="M8 8v4"/><path d="M9 18h6"/><circle cx="6.5" cy="18.5" r="2.5"/><circle cx="16.5" cy="18.5" r="2.5"/></svg>',
+)
+const restaurantIcon = createMarkerIcon(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" fill="#e53935" stroke="#ffffff" strokeWidth="1"><path d="M16,6V4c0-1.11-.89-2-2-2h-4C8.89,2,8,2.89,8,4v2H2v13c0,1.11.89,2,2,2h16c1.11,0,2-.89,2-2V6H16z M10,4h4v2h-4V4z"/></svg>',
+)
+const homeIcon = createMarkerIcon(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" fill="#43a047" stroke="#ffffff" strokeWidth="1"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>',
+)
+
+interface DriverMapProps {
+  driverLocation: { lat: number; lng: number } | null
+  restaurantLocation: { lat: number; lng: number }
+  customerLocation: { lat: number; lng: number }
+}
+
+export default function DriverMap({ driverLocation, restaurantLocation, customerLocation }: DriverMapProps) {
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places"],
+  })
+
+  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
+
+  const directionsCallback = useCallback(
+    (response: google.maps.DirectionsResult | null, status: google.maps.DirectionsStatus) => {
+      if (status === "OK" && response) {
+        setDirections(response)
+      } else {
+        console.error(`Directions request failed due to ${status}`)
+      }
+    },
+    [],
+  )
+
+  const mapCenter = useMemo(() => {
+    return driverLocation || restaurantLocation || { lat: -33.8688, lng: 151.2093 } // Default to Sydney
+  }, [driverLocation, restaurantLocation])
+
+  const waypoints = useMemo(() => {
+    return [{ location: restaurantLocation, stopover: true }]
+  }, [restaurantLocation])
+
+  if (loadError) return <div>Error loading maps</div>
+  if (!isLoaded) return <div className="bg-gray-200 rounded-lg w-full h-full animate-pulse" />
+
+  return (
+    <div className="relative h-full w-full">
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        center={mapCenter}
+        zoom={12}
+        options={{ styles: mapStyles, disableDefaultUI: true, zoomControl: true }}
+      >
+        {/* Markers */}
+        {driverLocation && (
+          <Marker
+            position={driverLocation}
+            icon={{ url: driverIcon, scaledSize: new window.google.maps.Size(40, 40) }}
+          />
+        )}
+        <Marker
+          position={restaurantLocation}
+          icon={{ url: restaurantIcon, scaledSize: new window.google.maps.Size(40, 40) }}
+        />
+        <Marker position={customerLocation} icon={{ url: homeIcon, scaledSize: new window.google.maps.Size(40, 40) }} />
+
+        {/* Directions Service and Renderer */}
+        {driverLocation && (
+          <>
+            <DirectionsService
+              options={{
+                destination: customerLocation,
+                origin: driverLocation,
+                waypoints: waypoints,
+                travelMode: window.google.maps.TravelMode.DRIVING,
+              }}
+              callback={directionsCallback}
+            />
+            {directions && (
+              <DirectionsRenderer
+                options={{
+                  directions,
+                  suppressMarkers: true, // We use our own custom markers
+                  polylineOptions: {
+                    strokeColor: "#1e88e5",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 6,
+                  },
+                }}
+              />
+            )}
+          </>
+        )}
+      </GoogleMap>
+      <RouteInfoBox directions={directions} />
+    </div>
+  )
+}

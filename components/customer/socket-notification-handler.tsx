@@ -1,35 +1,25 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { getSocket } from "@/lib/socket"
+import { useSession } from "next-auth/react"
 import { toast } from "sonner"
-import type { OrderStatus } from "@prisma/client"
+import { useSocket } from "@/components/providers"
 
-interface SocketNotificationHandlerProps {
-  userId?: string
-}
-
-export default function SocketNotificationHandler({ userId }: SocketNotificationHandlerProps) {
-  const router = useRouter()
+export default function SocketNotificationHandler() {
+  const { data: session } = useSession()
+  const { socket, isConnected } = useSocket()
 
   useEffect(() => {
-    if (!userId) return
+    if (!socket || !isConnected || !session?.user?.id) {
+      return
+    }
 
-    const socket = getSocket()
-    if (!socket) return
+    const userRoom = `user_${session.user.id}`
+    socket.emit("join-room", userRoom)
 
-    // Join a room specific to this user
-    socket.emit("join-user-room", userId)
-
-    const handleNotification = (data: { orderId: string; status: OrderStatus; message: string }) => {
-      console.log("Received order notification:", data)
-      toast.info(data.message, {
-        action: {
-          label: "Track Order",
-          onClick: () => router.push(`/customer/order/${data.orderId}/track`),
-        },
-        duration: 10000, // Keep toast visible for 10 seconds
+    const handleNotification = (data: { title: string; message: string }) => {
+      toast.info(data.title, {
+        description: data.message,
       })
     }
 
@@ -37,8 +27,9 @@ export default function SocketNotificationHandler({ userId }: SocketNotification
 
     return () => {
       socket.off("order_notification", handleNotification)
+      socket.emit("leave-room", userRoom)
     }
-  }, [userId, router])
+  }, [socket, isConnected, session?.user?.id])
 
   return null // This component does not render anything
 }

@@ -1,46 +1,19 @@
-import { Server as ServerIO } from "socket.io"
-import type { NextApiRequest } from "next"
-import type { NextApiResponseServerIO } from "@/types/next"
+import type { Server as HTTPServer } from "http"
+import type { Socket as NetSocket } from "net"
+import type { NextApiRequest, NextApiResponse } from "next"
+import { Server as IOServer } from "socket.io"
+import { setSocketIo } from "@/lib/socket"
 
-// This file now handles the SERVER-SIDE socket instance.
-const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIO) => {
-  if (!res.socket.server.io) {
-    console.log("*First use, initializing socket.io server")
+interface SocketServer extends HTTPServer {
+  io?: IOServer
+}
 
-    const httpServer = res.socket.server as any
-    const io = new ServerIO(httpServer, {
-      path: "/api/socket.io",
-      addTrailingSlash: false,
-      cors: {
-        origin: "*", // In production, restrict this to your domain
-        methods: ["GET", "POST"],
-      },
-    })
+interface SocketWithIO extends NetSocket {
+  server: SocketServer
+}
 
-    io.on("connection", (socket) => {
-      console.log(`New client connected on server: ${socket.id}`)
-
-      socket.on("join-restaurant-room", (restaurantId: string) => {
-        socket.join(restaurantId)
-        console.log(`Client ${socket.id} joined room for restaurant ${restaurantId}`)
-      })
-
-      socket.on("join-user-room", (userId: string) => {
-        const roomName = `user-${userId}`
-        socket.join(roomName)
-        console.log(`Client ${socket.id} joined room for user ${roomName}`)
-      })
-
-      socket.on("disconnect", () => {
-        console.log(`Client disconnected from server: ${socket.id}`)
-      })
-    })
-
-    res.socket.server.io = io
-  } else {
-    console.log("socket.io server already running")
-  }
-  res.end()
+interface NextApiResponseWithSocket extends NextApiResponse {
+  socket: SocketWithIO
 }
 
 export const config = {
@@ -49,4 +22,36 @@ export const config = {
   },
 }
 
-export default ioHandler
+export default function socketHandler(req: NextApiRequest, res: NextApiResponseWithSocket) {
+  if (res.socket.server.io) {
+    console.log("Socket is already running")
+  } else {
+    console.log("Socket is initializing")
+    const io = new IOServer(res.socket.server, {
+      path: "/api/socket",
+      addTrailingSlash: false,
+      cors: { origin: "*", methods: ["GET", "POST"] },
+    })
+    res.socket.server.io = io
+    setSocketIo(io)
+
+    io.on("connection", (socket) => {
+      console.log(`Socket connected: ${socket.id}`)
+
+      socket.on("join-room", (room) => {
+        socket.join(room)
+        console.log(`Socket ${socket.id} joined room: ${room}`)
+      })
+
+      socket.on("leave-room", (room) => {
+        socket.leave(room)
+        console.log(`Socket ${socket.id} left room: ${room}`)
+      })
+
+      socket.on("disconnect", () => {
+        console.log(`Socket disconnected: ${socket.id}`)
+      })
+    })
+  }
+  res.end()
+}
