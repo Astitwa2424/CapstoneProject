@@ -32,17 +32,41 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const socketInstance = io({
-      path: "/api/socket",
+      path: "/api/socket.io",
       addTrailingSlash: false,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      maxReconnectionAttempts: 10,
+      timeout: 20000,
+      forceNew: true,
     })
 
     socketInstance.on("connect", () => {
-      console.log("Socket connected")
+      console.log("Socket connected:", socketInstance.id)
       setIsConnected(true)
     })
 
-    socketInstance.on("disconnect", () => {
-      console.log("Socket disconnected")
+    socketInstance.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason)
+      setIsConnected(false)
+      if (reason === "io server disconnect") {
+        socketInstance.connect()
+      }
+    })
+
+    socketInstance.on("reconnect", (attemptNumber) => {
+      console.log("Socket reconnected after", attemptNumber, "attempts")
+      setIsConnected(true)
+    })
+
+    socketInstance.on("reconnect_error", (error) => {
+      console.error("Socket reconnection failed:", error)
+    })
+
+    socketInstance.on("connect_error", (error) => {
+      console.error("Socket connection error:", error)
       setIsConnected(false)
     })
 

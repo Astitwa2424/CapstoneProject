@@ -16,7 +16,7 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
           q: address,
           countrycodes: "au",
           limit: "1",
-        })
+        }),
     )
     const data = await response.json()
     if (data && data.length > 0) {
@@ -40,12 +40,13 @@ export async function getDriverProfile() {
 
 export async function getDriverDashboardStats() {
   const driverProfileId = await getDriverProfileIdFromSession()
-  if (!driverProfileId) return {
-    todaysEarnings: "0.00",
-    completedDeliveries: 0,
-    averageRating: "N/A",
-    activeHours: "0h",
-  }
+  if (!driverProfileId)
+    return {
+      todaysEarnings: "0.00",
+      completedDeliveries: 0,
+      averageRating: "N/A",
+      activeHours: "0h",
+    }
   try {
     const startOfToday = new Date(new Date().setHours(0, 0, 0, 0))
     const [todaysDeliveries, totalDeliveries, ratings] = await Promise.all([
@@ -53,9 +54,8 @@ export async function getDriverDashboardStats() {
       prisma.order.count({ where: { driverProfileId, status: "DELIVERED" } }),
       prisma.review.findMany({ where: { driverProfileId, rating: { not: null } }, select: { rating: true } }),
     ])
-    const avgRating = ratings.length > 0
-      ? (ratings.reduce((acc, r) => acc + (r.rating || 0), 0) / ratings.length).toFixed(1)
-      : "N/A"
+    const avgRating =
+      ratings.length > 0 ? (ratings.reduce((acc, r) => acc + (r.rating || 0), 0) / ratings.length).toFixed(1) : "N/A"
     return {
       todaysEarnings: (todaysDeliveries * 5).toFixed(2),
       completedDeliveries: totalDeliveries,
@@ -96,7 +96,7 @@ export async function updateDriverLocation(lat: number, lng: number) {
   try {
     const driverProfile = await prisma.driverProfile.update({
       where: { id: driverProfileId },
-      data: { latitude: lat, longitude: lng, lastSeen: new Date() },
+      data: { latitude: lat, longitude: lng },
     })
 
     const activeOrder = await prisma.order.findFirst({
@@ -109,7 +109,7 @@ export async function updateDriverLocation(lat: number, lng: number) {
 
     if (activeOrder) {
       if (activeOrder.customerProfile?.userId) {
-        await emitSocketEvent(`user-${activeOrder.customerProfile.userId}`, "driver_location_update", {
+        await emitSocketEvent(`user_${activeOrder.customerProfile.userId}`, "driver_location_update", {
           orderId: activeOrder.id,
           lat,
           lng,
@@ -155,7 +155,7 @@ export async function acceptOrder(orderId: string) {
   const deliveryCoords = await geocodeAddress(updatedOrder.deliveryAddress)
 
   if (updatedOrder.customerProfile?.userId) {
-    await emitSocketEvent(`user-${updatedOrder.customerProfile.userId}`, "order_notification", {
+    await emitSocketEvent(`user_${updatedOrder.customerProfile.userId}`, "order_notification", {
       orderId: updatedOrder.id,
       status: OrderStatus.OUT_FOR_DELIVERY,
       title: "Your driver is on the way!",
@@ -190,7 +190,7 @@ export async function completeDelivery(orderId: string) {
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId, driverProfileId },
-    data: { status: OrderStatus.DELIVERED, deliveredAt: new Date() },
+    data: { status: OrderStatus.DELIVERED },
     include: {
       customerProfile: { select: { userId: true } },
       restaurant: { select: { id: true } },
@@ -198,10 +198,11 @@ export async function completeDelivery(orderId: string) {
   })
 
   if (updatedOrder.customerProfile.userId) {
-    await emitSocketEvent(`user-${updatedOrder.customerProfile.userId}`, "order_notification", {
+    await emitSocketEvent(`user_${updatedOrder.customerProfile.userId}`, "order_notification", {
       orderId: updatedOrder.id,
       status: updatedOrder.status,
-      message: `Your order has been delivered!`,
+      title: "Order Delivered!",
+      message: `Your order has been successfully delivered. Enjoy your meal!`,
     })
   }
 
@@ -227,7 +228,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   })
 
   if (updatedOrder.customerProfile.userId) {
-    await emitSocketEvent(`user-${updatedOrder.customerProfile.userId}`, "order_notification", {
+    await emitSocketEvent(`user_${updatedOrder.customerProfile.userId}`, "order_notification", {
       orderId: updatedOrder.id,
       status: updatedOrder.status,
       message: `Your order status has been updated to ${status.replace(/_/g, " ").toLowerCase()}`,
@@ -326,5 +327,52 @@ export async function updateDriverProfile(prevState: any, formData: FormData) {
   } catch (e) {
     console.error("Failed to update driver profile:", e)
     return { error: "An unexpected error occurred. Please try again." }
+  }
+}
+
+export async function getDriverOrderHistory(page = 1, limit = 10, status?: OrderStatus) {
+  const driverProfileId = await getDriverProfileIdFromSession()
+  if (!driverProfileId) return { orders: [], totalCount: 0, totalPages: 0 }
+
+  try {
+    const where = {
+      driverProfileId,
+      ...(status && { status }),
+    }
+
+    const [orders, totalCount] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          restaurant: {
+            select: { name: true, logoImage: true, address: true },
+          },
+          customerProfile: {
+            select: { user: { select: { name: true } } },
+          },
+          orderItems: {
+            include: { menuItem: { select: { name: true } } },
+          },
+          reviews: {
+            where: { driverProfileId },
+            select: { rating: true, comment: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ])
+
+    return {
+      orders,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: page,
+    }
+  } catch (error) {
+    console.error("Error fetching driver order history:", error)
+    return { orders: [], totalCount: 0, totalPages: 0, currentPage: 1 }
   }
 }

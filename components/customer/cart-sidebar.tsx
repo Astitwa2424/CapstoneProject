@@ -5,7 +5,6 @@ import Link from "next/link"
 import Image from "next/image"
 import { useCart } from "@/hooks/use-cart"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -27,11 +26,6 @@ export function CartSidebar() {
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <ShoppingCart className="h-5 w-5" />
-          {itemCount > 0 && (
-            <Badge className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-white flex items-center justify-center p-0">
-              {itemCount}
-            </Badge>
-          )}
           <span className="sr-only">Open cart</span>
         </Button>
       </SheetTrigger>

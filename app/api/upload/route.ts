@@ -1,20 +1,22 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
 import { writeFile } from "fs/promises"
 import { join } from "path"
-import { auth } from "@/lib/auth"
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request): Promise<NextResponse> {
   try {
+    // Check for user authentication
     const session = await auth()
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const data = await request.formData()
-    const file: File | null = data.get("file") as unknown as File
+    // Parse the form data
+    const formData = await request.formData()
+    const file = formData.get("file") as File
 
     if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
+      return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
     // Validate file type
@@ -23,31 +25,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json({ error: "File size must be less than 5MB" }, { status: 400 })
+    const maxSizeInMB = 5
+    if (file.size > maxSizeInMB * 1024 * 1024) {
+      return NextResponse.json({ error: `File size must be less than ${maxSizeInMB}MB` }, { status: 400 })
     }
 
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Create unique filename
+    // Generate unique filename with timestamp
     const timestamp = Date.now()
+    const fileExtension = file.name.split(".").pop()
     const filename = `${timestamp}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`
-    const path = join(process.cwd(), "public/uploads", filename)
 
-    // Write the file
-    await writeFile(path, buffer)
+    // Save to public/uploads directory
+    const uploadDir = join(process.cwd(), "public", "uploads")
+    const filePath = join(uploadDir, filename)
 
-    // Return the URL path
-    const imageUrl = `/uploads/${filename}`
+    await writeFile(filePath, buffer)
+
+    // Return local URL path
+    const url = `/uploads/${filename}`
 
     return NextResponse.json({
       success: true,
-      imageUrl,
-      message: "File uploaded successfully",
+      url: url,
+      downloadUrl: url,
     })
   } catch (error) {
-    console.error("Upload error:", error)
-    return NextResponse.json({ error: "Failed to upload file" }, { status: 500 })
+    console.error("Error uploading file:", error)
+    const errorMessage = error instanceof Error ? error.message : "Failed to upload file"
+    return NextResponse.json(
+      {
+        success: false,
+        error: errorMessage,
+      },
+      { status: 500 },
+    )
   }
 }

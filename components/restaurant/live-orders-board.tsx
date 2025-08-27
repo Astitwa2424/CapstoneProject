@@ -43,38 +43,66 @@ export function LiveOrdersBoard({ initialOrders, restaurantId }: LiveOrdersBoard
   useEffect(() => {
     if (!socket) return
 
-    socket.emit("join-restaurant-room", restaurantId)
+    const restaurantRoom = `restaurant_${restaurantId}`
+    socket.emit("join-room", restaurantRoom)
 
     const handleOrderStatusUpdate = (updatedOrder: Order) => {
+      console.log("Order status updated:", updatedOrder)
       setOrders((prevOrders) => prevOrders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order)))
     }
 
     const handleNewOrder = (newOrder: Order) => {
+      console.log("New order received:", newOrder)
       setOrders((prevOrders) => [newOrder, ...prevOrders])
       toast.success(`New order received: ${newOrder.orderNumber}`)
     }
 
     socket.on("order_status_update", handleOrderStatusUpdate)
     socket.on("new_order", handleNewOrder)
+    socket.on("order_accepted", (orderId: string) => {
+      console.log("Order accepted by driver:", orderId)
+      setOrders((prevOrders) => prevOrders.filter((order) => order.id !== orderId))
+    })
 
     return () => {
       socket.off("order_status_update", handleOrderStatusUpdate)
       socket.off("new_order", handleNewOrder)
+      socket.off("order_accepted")
+      socket.emit("leave-room", restaurantRoom)
     }
   }, [socket, restaurantId])
 
   const handleStatusUpdate = async (orderId: string, newStatus: OrderStatus) => {
     setProcessingOrders((prev) => new Set(prev).add(orderId))
 
+    const originalOrder = orders.find((order) => order.id === orderId)
+    const optimisticUpdate = (prevOrders: Order[]) =>
+      prevOrders.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order))
+
+    setOrders(optimisticUpdate)
+
     startTransition(async () => {
       try {
         const result = await updateOrderStatus(orderId, newStatus)
         if (result.success) {
           toast.success(`Order status updated to ${newStatus.replace(/_/g, " ").toLowerCase()}`)
+          setTimeout(() => {
+            window.location.reload()
+          }, 1000)
         } else {
+          setOrders((prevOrders) =>
+            prevOrders.map((order) =>
+              order.id === orderId ? { ...order, status: originalOrder?.status || order.status } : order,
+            ),
+          )
           toast.error(result.error || "Failed to update order status")
         }
       } catch (error) {
+        setOrders((prevOrders) =>
+          prevOrders.map((order) =>
+            order.id === orderId ? { ...order, status: originalOrder?.status || order.status } : order,
+          ),
+        )
         toast.error("Failed to update order status")
         console.error("Error updating order status:", error)
       } finally {

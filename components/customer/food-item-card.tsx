@@ -28,17 +28,26 @@ interface FoodItemCardProps {
 }
 
 export function FoodItemCard({ item }: FoodItemCardProps) {
+  const placeholderImage = `/placeholder.svg?height=200&width=300&text=${encodeURIComponent(item.name)}`
+
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer">
       <div className="relative h-48">
         <Image
-          src={item.image || `/placeholder.svg?height=200&width=300&text=${encodeURIComponent(item.name)}`}
+          src={item.image || placeholderImage}
           alt={item.name}
           fill
           className="object-cover"
           onError={(e) => {
             const target = e.target as HTMLImageElement
-            target.src = `/placeholder.svg?height=200&width=300&text=${encodeURIComponent(item.name)}`
+            if (item.image && !target.src.includes("placeholder.svg")) {
+              console.log(`Failed to load image for ${item.name}:`, item.image)
+            }
+            target.src = placeholderImage
+          }}
+          onLoad={(e) => {
+            const target = e.target as HTMLImageElement
+            target.style.filter = "none"
           }}
         />
         {item.isVegetarian && (

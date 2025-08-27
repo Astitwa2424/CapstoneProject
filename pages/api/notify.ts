@@ -17,8 +17,17 @@ export default function handler(req: NextApiRequest, res: SocketWithIO) {
     return res.status(405).json({ message: "Method not allowed" })
   }
 
+  const internalSecret = req.headers["x-internal-secret"]
+  if (internalSecret !== (process.env.INTERNAL_SECRET_KEY || "super-secret-key-for-dev")) {
+    return res.status(401).json({ message: "Unauthorized" })
+  }
+
   try {
-    const { type, orderId, restaurantId, order } = req.body
+    const { room, event, data } = req.body
+
+    if (!room || !event) {
+      return res.status(400).json({ message: "Missing required fields: room, event" })
+    }
 
     // Initialize Socket.IO if not already done
     if (!res.socket.server.io) {
@@ -36,29 +45,12 @@ export default function handler(req: NextApiRequest, res: SocketWithIO) {
 
     const io = res.socket.server.io
 
-    if (type === "new_order") {
-      // Emit to restaurant-specific room
-      io.to(`restaurant-${restaurantId}`).emit("new_order", {
-        orderId,
-        order,
-        timestamp: new Date().toISOString(),
-      })
+    console.log(`Emitting event "${event}" to room "${room}"`, data)
+    io.to(room).emit(event, data)
 
-      // Also emit to general restaurant dashboard room
-      io.to("restaurant-dashboard").emit("order_update", {
-        type: "new_order",
-        orderId,
-        restaurantId,
-        order,
-        timestamp: new Date().toISOString(),
-      })
-
-      console.log(`Notified restaurant ${restaurantId} about new order ${orderId}`)
-    }
-
-    res.status(200).json({ success: true, message: "Notification sent" })
+    res.status(200).json({ success: true, message: "Event emitted successfully" })
   } catch (error) {
     console.error("Error in notify API:", error)
-    res.status(500).json({ success: false, error: "Failed to send notification" })
+    res.status(500).json({ success: false, error: "Failed to emit event" })
   }
 }

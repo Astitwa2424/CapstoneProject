@@ -4,13 +4,14 @@ import { MenuItemForm } from "@/components/restaurant/menu-item-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface EditMenuItemPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function EditMenuItemPage({ params }: EditMenuItemPageProps) {
-  const result = await getMenuItemById(params.id)
+  const { id } = await params
+  const result = await getMenuItemById(id)
 
   if (!result.success || !result.menuItem) {
     notFound()

@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MapPin, Clock, DollarSign, Navigation, ExternalLink, Star } from "lucide-react"
 import dynamic from "next/dynamic"
-import { useSocket } from "@/components/providers" // Import the hook
+import { useSocket } from "@/components/providers"
 import { acceptOrder, toggleDriverAvailability, completeDelivery, updateDriverLocation } from "@/app/driver/actions"
+import { toast } from "sonner"
 
 const DriverMap = dynamic(() => import("@/components/tracking/driver-map"), {
   ssr: false,
@@ -67,7 +68,7 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
   const [isLocationEnabled, setIsLocationEnabled] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [showNavigation, setShowNavigation] = useState(false)
-  const { socket } = useSocket()
+  const { socket, isConnected } = useSocket()
 
   // Get driver's current location for Australian operations
   useEffect(() => {
@@ -107,25 +108,96 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
     }
   }, [driver.isAvailable])
 
-  // Socket event handlers
   useEffect(() => {
-    if (!socket) return
+    if (!socket || !isConnected) return
 
-    socket.on("new-order", (order: Order) => {
-      if (driver.isAvailable) {
-        setAvailableOrders((prev) => [order, ...prev])
+    console.log("[v0] Driver dashboard connecting to socket events")
+
+    // Join driver-specific rooms
+    socket.emit("join-room", "drivers_available")
+    socket.emit("join-room", "drivers_all")
+    socket.emit("join-room", `driver_${driver.id}`)
+
+    const handleNewOrderForDriver = (order: Order) => {
+      console.log("[v0] New order available for driver:", order)
+      if (driver.isAvailable && !activeOrder) {
+        setAvailableOrders((prev) => {
+          // Avoid duplicates
+          const exists = prev.some((existingOrder) => existingOrder.id === order.id)
+          if (exists) return prev
+
+          toast.success("New Order Available!", {
+            description: `${order.restaurant.name} - $${order.total.toFixed(2)}`,
+          })
+          return [order, ...prev]
+        })
       }
-    })
+    }
 
+    const handleOrderAcceptedByOther = (data: { orderId: string; driverName?: string }) => {
+      console.log("[v0] Order accepted by another driver:", data)
+      setAvailableOrders((prev) => prev.filter((order) => order.id !== data.orderId))
+
+      if (data.driverName) {
+        toast.info(`Order accepted by ${data.driverName}`)
+      } else {
+        toast.info("Order was accepted by another driver")
+      }
+    }
+
+    const handleOrderStatusUpdate = (data: { orderId: string; status: string }) => {
+      console.log("[v0] Order status update for driver:", data)
+
+      // If this is an order becoming ready for pickup, add it to available orders
+      if (data.status === "READY_FOR_PICKUP" && driver.isAvailable && !activeOrder) {
+        // The order details will come via new_order_for_driver event
+        toast.success("New Order Ready!", {
+          description: "A new order is ready for pickup",
+        })
+      }
+    }
+
+    const handleDriverAssignment = (data: { orderId: string; driverId: string }) => {
+      console.log("[v0] Driver assignment:", data)
+      if (data.driverId === driver.id) {
+        // This driver was assigned to an order
+        const assignedOrder = availableOrders.find((order) => order.id === data.orderId)
+        if (assignedOrder) {
+          setActiveOrder(assignedOrder)
+          setAvailableOrders((prev) => prev.filter((order) => order.id !== data.orderId))
+          setShowNavigation(true)
+          toast.success("Order Assigned!", {
+            description: "You've been assigned a delivery",
+          })
+        }
+      }
+    }
+
+    // Socket event listeners
+    socket.on("new_order_for_driver", handleNewOrderForDriver)
+    socket.on("order_accepted_by_other", handleOrderAcceptedByOther)
+    socket.on("order_status_update", handleOrderStatusUpdate)
+    socket.on("driver_assigned", handleDriverAssignment)
+
+    // Legacy event handlers for backward compatibility
+    socket.on("new-order", handleNewOrderForDriver)
     socket.on("order-accepted", (orderId: string) => {
-      setAvailableOrders((prev) => prev.filter((order) => order.id !== orderId))
+      handleOrderAcceptedByOther({ orderId })
     })
 
     return () => {
-      socket.off("new-order")
+      socket.off("new_order_for_driver", handleNewOrderForDriver)
+      socket.off("order_accepted_by_other", handleOrderAcceptedByOther)
+      socket.off("order_status_update", handleOrderStatusUpdate)
+      socket.off("driver_assigned", handleDriverAssignment)
+      socket.off("new-order", handleNewOrderForDriver)
       socket.off("order-accepted")
+
+      socket.emit("leave-room", "drivers_available")
+      socket.emit("leave-room", "drivers_all")
+      socket.emit("leave-room", `driver_${driver.id}`)
     }
-  }, [socket, driver.isAvailable])
+  }, [socket, isConnected, driver.isAvailable, driver.id, activeOrder])
 
   const handleToggleAvailability = async () => {
     setIsLoading(true)
@@ -138,9 +210,14 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
         setIsLocationEnabled(false)
         setActiveOrder(null)
         setShowNavigation(false)
+        setAvailableOrders([]) // Clear available orders when going offline
+        toast.info("You're now offline")
+      } else {
+        toast.success("You're now online and ready for orders!")
       }
     } catch (error) {
       console.error("Failed to toggle availability:", error)
+      toast.error("Failed to update availability")
     } finally {
       setIsLoading(false)
     }
@@ -161,9 +238,14 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
         setActiveOrder(orderWithCoords)
         setAvailableOrders((prev) => prev.filter((order) => order.id !== orderId))
         setShowNavigation(true) // Show navigation interface when order is accepted
+
+        toast.success("Order Accepted!", {
+          description: `Pickup from ${acceptedOrder.restaurant.name}`,
+        })
       }
     } catch (error) {
       console.error("Failed to accept order:", error)
+      toast.error("Failed to accept order")
     } finally {
       setIsLoading(false)
     }
@@ -177,10 +259,21 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
       await completeDelivery(activeOrder.id)
       setActiveOrder(null)
       setShowNavigation(false)
-      // Refresh stats
-      window.location.reload()
+      // Update stats without page refresh
+      if (stats) {
+        setStats({
+          ...stats,
+          completedDeliveries: stats.completedDeliveries + 1,
+          todaysEarnings: (Number.parseFloat(stats.todaysEarnings) + 5).toFixed(2), // Add $5 delivery fee
+        })
+      }
+
+      toast.success("Delivery Completed!", {
+        description: "Great job! Ready for your next order.",
+      })
     } catch (error) {
       console.error("Failed to complete delivery:", error)
+      toast.error("Failed to complete delivery")
     } finally {
       setIsLoading(false)
     }
@@ -227,6 +320,12 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
                 FoodHub Driver
               </h1>
               <p className="text-slate-400 mt-1">Welcome back, {driver.user.name || "Driver"}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
+                <span className="text-xs text-slate-400">
+                  {isConnected ? "Connected - Live updates active" : "Reconnecting..."}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-4">
               <Badge variant={driver.isAvailable ? "default" : "secondary"} className="px-3 py-1">
@@ -362,6 +461,11 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-green-400" />
                 Available Orders
+                {driver.isAvailable && isConnected && (
+                  <Badge variant="outline" className="ml-auto border-green-500 text-green-400 text-xs">
+                    LIVE
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -375,6 +479,7 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
                   <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No orders available</p>
                   <p className="text-sm mt-2">New orders will appear here automatically</p>
+                  {!isConnected && <p className="text-xs mt-2 text-red-400">Reconnecting to live updates...</p>}
                 </div>
               ) : (
                 <div className="space-y-4">

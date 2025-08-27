@@ -161,7 +161,7 @@ model RestaurantProfile {
   mapLatitude                Float?   @map("map_latitude")
   mapLongitude               Float?   @map("map_longitude")
   isActive                   Boolean  @default(true)
-  bannerImage                String?  @map("banner_image")
+  logoImage                  String?  @map("logo_image")
   createdAt                  DateTime @default(now()) @map("created_at")
   updatedAt                  DateTime @updatedAt @map("updated_at")
 

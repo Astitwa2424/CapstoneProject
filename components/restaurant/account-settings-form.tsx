@@ -12,13 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Separator } from "@/components/ui/separator"
-import { BannerImageUpload } from "@/components/ui/banner-image-upload"
+import { LogoImageUpload } from "@/components/ui/logo-image-upload"
+import { OperatingHoursInput } from "@/components/ui/operating-hour-input"
 import { updateRestaurantAccount } from "@/app/restaurant/settings/actions"
 import { toast } from "sonner"
 
 const accountFormSchema = z.object({
   // Profile fields
-  name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
+  name: z.string().min(2, { message: "Restaurant name must be at least 2 chaaracters." }),
   description: z.string().optional(),
   streetAddress: z.string().optional(),
   city: z.string().optional(),
@@ -29,7 +30,7 @@ const accountFormSchema = z.object({
   website: z.string().url().optional().or(z.literal("")),
   facebookUrl: z.string().url().optional().or(z.literal("")),
   instagramUrl: z.string().url().optional().or(z.literal("")),
-  bannerImage: z.string().optional(),
+  logoImage: z.string().optional(),
 
   // Business fields
   businessRegistrationNumber: z.string().optional(),
@@ -72,7 +73,7 @@ export function AccountSettingsForm({ initialProfile, initialSettings, userData 
       website: initialProfile?.website || "",
       facebookUrl: initialProfile?.facebookUrl || "",
       instagramUrl: initialProfile?.instagramUrl || "",
-      bannerImage: initialProfile?.bannerImage || "",
+      logoImage: initialProfile?.logoImage || "",
       businessRegistrationNumber: initialProfile?.businessRegistrationNumber || "",
       taxId: initialProfile?.taxId || "",
       category: initialProfile?.category || "",
@@ -118,7 +119,7 @@ export function AccountSettingsForm({ initialProfile, initialSettings, userData 
           <Tabs defaultValue="profile" className="space-y-4">
             <TabsList>
               <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="banner">Banner</TabsTrigger>
+              <TabsTrigger value="logo">Logo</TabsTrigger>
               <TabsTrigger value="business">Business</TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
@@ -294,22 +295,22 @@ export function AccountSettingsForm({ initialProfile, initialSettings, userData 
               </Card>
             </TabsContent>
 
-            <TabsContent value="banner" className="space-y-4">
+            <TabsContent value="logo" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Restaurant Banner</CardTitle>
+                  <CardTitle>Restaurant Logo</CardTitle>
                   <CardDescription>
-                    Upload a banner image that will be displayed on your restaurant page.
+                    Upload a logo that will be displayed on your restaurant page and in customer listings.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <FormField
                     control={form.control}
-                    name="bannerImage"
+                    name="logoImage"
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <BannerImageUpload value={field.value} onChange={field.onChange} />
+                          <LogoImageUpload value={field.value} onChange={field.onChange} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -356,35 +357,32 @@ export function AccountSettingsForm({ initialProfile, initialSettings, userData 
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Business Category</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Restaurant, Fast Food, etc." {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Business Category</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Restaurant, Fast Food, etc." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                    <FormField
-                      control={form.control}
-                      name="operatingHours"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Operating Hours</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Mon-Sun: 9AM-10PM" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  <FormField
+                    control={form.control}
+                    name="operatingHours"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <OperatingHoursInput value={field.value} onChange={field.onChange} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField

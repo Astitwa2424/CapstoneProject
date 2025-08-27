@@ -1,87 +1,117 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { X, LinkIcon } from "lucide-react"
+import { X, Cloud, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Image from "next/image"
 
 interface ImageUploadProps {
   value?: string
-  onChange: (url: string) => void
+  onChange: (value: string) => void
   disabled?: boolean
-  className?: string
+  label?: string
+  description?: string
 }
 
-export function ImageUpload({ value, onChange, disabled, className }: ImageUploadProps) {
-  const [imageUrl, setImageUrl] = useState(value || "")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function ImageUpload({
+  value,
+  onChange,
+  disabled,
+  label = "Image",
+  description = "Upload an image for your item.",
+}: ImageUploadProps) {
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
 
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setImageUrl(e.target.value)
-    setError(null)
-  }
+  const handleFileUpload = useCallback(
+    async (file: File) => {
+      if (!file) return
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select an image file.")
+        return
+      }
 
-    if (!imageUrl.trim()) {
-      setError("Please enter an image URL")
-      return
-    }
+      const maxSizeInMB = 10
+      if (file.size > maxSizeInMB * 1024 * 1024) {
+        toast.error(`File size must be less than ${maxSizeInMB}MB.`)
+        return
+      }
 
-    // Basic URL validation
-    try {
-      new URL(imageUrl)
-    } catch (err) {
-      setError("Please enter a valid URL")
-      return
-    }
+      setIsUploading(true)
 
-    setIsLoading(true)
+      try {
+        const response = await fetch(`/api/upload-blob?filename=${encodeURIComponent(file.name)}`, {
+          method: "POST",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        })
 
-    // Check if image loads correctly
-    const img = new Image()
-    img.onload = () => {
-      onChange(imageUrl)
-      setIsLoading(false)
-      toast.success("Image URL added successfully")
-    }
-    img.onerror = () => {
-      setError("Could not load image from this URL")
-      setIsLoading(false)
-    }
-    img.src = imageUrl
-  }
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Upload failed.")
+        }
 
-  const removeImage = () => {
+        const newBlob = await response.json()
+
+        onChange(newBlob.url)
+        toast.success("Image uploaded successfully!")
+      } catch (error) {
+        console.error("Upload error:", error)
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred."
+        toast.error(`Upload failed: ${errorMessage}`)
+      } finally {
+        setIsUploading(false)
+      }
+    },
+    [onChange],
+  )
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        handleFileUpload(file)
+      }
+      e.target.value = ""
+    },
+    [handleFileUpload],
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragOver(false)
+      const file = e.dataTransfer.files?.[0]
+      if (file) {
+        handleFileUpload(file)
+      }
+    },
+    [handleFileUpload],
+  )
+
+  const removeImage = useCallback(() => {
     onChange("")
-    setImageUrl("")
-    setError(null)
-  }
+    toast.success("Image removed.")
+  }, [onChange])
 
   return (
-    <div className={className}>
-      <Label>Food Image URL</Label>
+    <div className="space-y-4">
+      <div>
+        <Label>{label}</Label>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
 
       {value ? (
-        <div className="relative mt-2">
-          <div className="relative w-full h-48 rounded-lg overflow-hidden border">
-            <Image
-              src={value || "/placeholder.svg"}
-              alt="Food item"
-              fill
-              className="object-cover"
-              onError={(e) => {
-                // If image fails to load, show placeholder
-                e.currentTarget.src = "/placeholder.svg?height=300&width=400"
-              }}
-            />
+        <div className="relative">
+          <div className="relative w-full h-64 rounded-lg overflow-hidden border">
+            <Image src={value || "/placeholder.svg"} alt="Uploaded image" fill className="object-cover" />
           </div>
           <Button
             type="button"
@@ -95,24 +125,37 @@ export function ImageUpload({ value, onChange, disabled, className }: ImageUploa
           </Button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="mt-2 space-y-2">
-          <div className="flex gap-2">
-            <Input
-              type="url"
-              placeholder="https://example.com/food-image.jpg"
-              value={imageUrl}
-              onChange={handleUrlChange}
-              disabled={disabled || isLoading}
-              className={error ? "border-red-500" : ""}
-            />
-            <Button type="submit" disabled={disabled || isLoading} variant="secondary">
-              <LinkIcon className="h-4 w-4 mr-2" />
-              Add
-            </Button>
+        <div
+          className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+            isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"
+          } ${disabled || isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
+          onDrop={handleDrop}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setIsDragOver(true)
+          }}
+          onDragLeave={() => setIsDragOver(false)}
+        >
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+            onChange={handleFileChange}
+            disabled={disabled || isUploading}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+          />
+          <div className="flex flex-col items-center space-y-4">
+            {isUploading ? (
+              <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+            ) : (
+              <Cloud className="h-12 w-12 text-muted-foreground" />
+            )}
+            <div className="space-y-2">
+              <p className="text-lg font-medium">{isUploading ? "Uploading..." : "Drop your image here"}</p>
+              <p className="text-sm text-muted-foreground">or click to browse files</p>
+              <p className="text-xs text-muted-foreground">PNG, JPG, GIF, WebP up to 10MB</p>
+            </div>
           </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <p className="text-xs text-muted-foreground">Enter a direct link to an image (JPG, PNG, GIF)</p>
-        </form>
+        </div>
       )}
     </div>
   )

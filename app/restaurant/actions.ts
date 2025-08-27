@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache"
 import { OrderStatus, type Modification, type MenuItem } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { getRestaurantIdFromSession } from "@/lib/auth-utils"
-import { emitToRestaurant, emitSocketEvent } from "@/lib/socket-server"
+import { emitSocketEvent } from "@/lib/socket-server"
 
 export type MenuItemWithModifications = MenuItem & {
   modifications: Modification[]
@@ -185,7 +185,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     })
 
     if (!order) {
-      return { success: false, error: "Order not found." }
+      return { success: false, error: "Order not found.", currentStatus: order?.status }
     }
 
     const updatedOrder = await prisma.order.update({
@@ -219,13 +219,15 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
         deliveryType: fullUpdatedOrder.deliveryAddress ? ("delivery" as const) : ("pickup" as const),
         deliveryAddress: fullUpdatedOrder.deliveryAddress,
       }
-      // Notify all clients in the restaurant's room about the status change
-      await emitToRestaurant(restaurantId, "order_status_update", serializedOrder)
 
-      // Also notify the specific customer about their order update.
+      // Emit to restaurant room
+      const restaurantRoom = `restaurant_${restaurantId}`
+      await emitSocketEvent(restaurantRoom, "order_status_update", serializedOrder)
+
+      // Emit to customer room
       const customerUserId = fullUpdatedOrder.customerProfile.userId
       if (customerUserId) {
-        const customerRoom = `user-${customerUserId}`
+        const customerRoom = `user_${customerUserId}`
         const notificationPayload = {
           orderId: fullUpdatedOrder.id,
           status: fullUpdatedOrder.status,
@@ -234,6 +236,18 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
             .toUpperCase()} is now ${fullUpdatedOrder.status.replace(/_/g, " ").toLowerCase()}.`,
         }
         await emitSocketEvent(customerRoom, "order_notification", notificationPayload)
+        await emitSocketEvent(`order_${fullUpdatedOrder.id}`, "order_notification", notificationPayload)
+      }
+
+      if (status === "READY_FOR_PICKUP") {
+        // Emit to all available drivers
+        await emitSocketEvent("drivers_available", "new_order_for_driver", serializedOrder)
+
+        // Also emit general order status update for driver dashboard
+        await emitSocketEvent("drivers_all", "order_status_update", {
+          orderId: fullUpdatedOrder.id,
+          status: fullUpdatedOrder.status,
+        })
       }
     }
 
@@ -242,7 +256,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
     return { success: true, order: updatedOrder }
   } catch (error) {
     console.error("Failed to update order status:", error)
-    return { success: false, error: "Database error." }
+    return { success: false, error: "Database error.", currentStatus: status }
   }
 }
 

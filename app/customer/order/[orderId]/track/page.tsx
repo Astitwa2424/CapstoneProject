@@ -12,6 +12,7 @@ import { AlertCircle, Loader2, CheckCircle, Home, Phone, Star, User, Car, MapPin
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
+import { toast } from "sonner"
 import type {
   Order,
   OrderItem,
@@ -22,6 +23,8 @@ import type {
   DriverProfile,
 } from "@prisma/client"
 import { useSocket } from "@/components/providers"
+import { usePolling } from "@/components/customer/polling-provider"
+import { RefreshButton } from "@/components/ui/refresh-button"
 
 type FullOrderItem = OrderItem & {
   menuItem: {
@@ -58,6 +61,31 @@ export default function TrackOrderPage() {
   const [driverInfoShown, setDriverInfoShown] = useState(false)
 
   const { socket, isConnected } = useSocket()
+  const { forceRefresh } = usePolling()
+
+  useEffect(() => {
+    const handlePollingRefresh = async () => {
+      if (orderId && order && order.status !== "DELIVERED") {
+        try {
+          const orderDetails = (await getOrderDetails(orderId)) as FullOrder | null
+          if (orderDetails) {
+            setOrder(orderDetails)
+            console.log("[v0] Order refreshed via polling:", orderDetails.status)
+          }
+        } catch (err) {
+          console.error("[v0] Polling refresh failed:", err)
+        }
+      }
+    }
+
+    window.addEventListener("polling-refresh", handlePollingRefresh)
+    window.addEventListener("force-refresh", handlePollingRefresh)
+
+    return () => {
+      window.removeEventListener("polling-refresh", handlePollingRefresh)
+      window.removeEventListener("force-refresh", handlePollingRefresh)
+    }
+  }, [orderId, order])
 
   useEffect(() => {
     if (!orderId) return
@@ -103,41 +131,109 @@ export default function TrackOrderPage() {
 
   useEffect(() => {
     if (!order || order.status === "DELIVERED" || !socket || !isConnected) {
+      console.log("[v0] Socket effect skipped:", {
+        hasOrder: !!order,
+        isDelivered: order?.status === "DELIVERED",
+        hasSocket: !!socket,
+        isConnected,
+      })
       return
     }
 
-    const handleOrderStatusUpdate = (data: { orderId: string; status: OrderStatus }) => {
+    console.log("[v0] Setting up socket listeners for order:", order.id)
+
+    const handleOrderStatusUpdate = (data: { orderId: string; status: OrderStatus; message?: string }) => {
+      console.log("[v0] Order status update received:", data)
       if (data.orderId === order.id) {
+        console.log("[v0] Updating order status from", order.status, "to", data.status)
         setOrder((prevOrder) => (prevOrder ? { ...prevOrder, status: data.status } : null))
+
+        // Show toast notification for status changes
+        if (data.message) {
+          toast.info("Order Update", { description: data.message })
+        }
+      } else {
+        console.log("[v0] Order ID mismatch:", data.orderId, "vs", order.id)
       }
     }
 
     const handleDriverLocationUpdate = (data: { orderId: string; lat: number; lng: number }) => {
+      console.log("[v0] Driver location update:", data)
       if (data.orderId === order.id) {
         setDriverLocation({ lat: data.lat, lng: data.lng })
       }
     }
 
+    const handleDriverAssigned = (data: { orderId: string; driverInfo: any }) => {
+      console.log("[v0] Driver assigned:", data)
+      if (data.orderId === order.id) {
+        setOrder((prevOrder) => (prevOrder ? { ...prevOrder, driverProfile: data.driverInfo } : null))
+        toast.success("Driver Assigned", {
+          description: `${data.driverInfo.user?.name || "Your driver"} is on the way!`,
+        })
+      }
+    }
+
     const room = `order_${order.id}`
+    const userRoom = `user_${order.customerProfile.userId}`
+
+    console.log("[v0] Joining rooms:", { room, userRoom })
+
     socket.emit("join-room", room)
+    socket.emit("join-room", userRoom)
+
+    socket.on("connect", () => {
+      console.log("[v0] Socket connected, rejoining rooms")
+      socket.emit("join-room", room)
+      socket.emit("join-room", userRoom)
+    })
+
+    socket.on("disconnect", () => {
+      console.log("[v0] Socket disconnected")
+    })
+
+    socket.onAny((eventName, ...args) => {
+      console.log("[v0] Socket event received:", eventName, args)
+    })
 
     socket.on("order_notification", handleOrderStatusUpdate)
     socket.on("driver_location_update", handleDriverLocationUpdate)
+    socket.on("driver_assigned", handleDriverAssigned)
 
     return () => {
+      console.log("[v0] Cleaning up socket listeners")
       socket.off("order_notification", handleOrderStatusUpdate)
       socket.off("driver_location_update", handleDriverLocationUpdate)
+      socket.off("driver_assigned", handleDriverAssigned)
+      socket.off("connect")
+      socket.off("disconnect")
+      socket.offAny()
       socket.emit("leave-room", room)
+      socket.emit("leave-room", userRoom)
     }
   }, [order, socket, isConnected])
 
+  const handleManualRefresh = async () => {
+    if (orderId) {
+      try {
+        const orderDetails = (await getOrderDetails(orderId)) as FullOrder | null
+        if (orderDetails) {
+          setOrder(orderDetails)
+          toast.success("Order status refreshed")
+        }
+      } catch (err) {
+        toast.error("Failed to refresh order status")
+      }
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="relative">
-            <Loader2 className="h-16 w-16 animate-spin text-orange-500 mx-auto" />
-            <div className="absolute inset-0 h-16 w-16 border-4 border-orange-200 rounded-full mx-auto"></div>
+            <Loader2 className="h-16 w-16 animate-spin text-gray-600 mx-auto" />
+            <div className="absolute inset-0 h-16 w-16 border-4 border-gray-200 rounded-full mx-auto"></div>
           </div>
           <h2 className="mt-4 text-xl font-semibold text-gray-800">Loading your order...</h2>
           <p className="text-gray-600">Getting the latest updates</p>
@@ -148,13 +244,13 @@ export default function TrackOrderPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-50 flex flex-col items-center justify-center text-center">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md mx-4">
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-center">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md mx-4 border border-gray-200">
           <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-red-600 mb-2">Oops!</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Not Found</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <Link href="/customer/dashboard">
-            <Button className="bg-red-500 hover:bg-red-600">
+            <Button className="bg-gray-900 hover:bg-gray-800 text-white">
               <Home className="h-4 w-4 mr-2" />
               Back to Dashboard
             </Button>
@@ -170,22 +266,22 @@ export default function TrackOrderPage() {
 
   if (order.status === "DELIVERED") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 py-8">
+      <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
-          <Card className="bg-white shadow-2xl border-0 rounded-3xl overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-green-500 to-emerald-500 text-white text-center py-8">
+          <Card className="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+            <CardHeader className="bg-gray-900 text-white text-center py-8">
               <div className="flex justify-center mb-4">
                 <div className="bg-white rounded-full p-4">
-                  <CheckCircle className="h-16 w-16 text-green-500" />
+                  <CheckCircle className="h-16 w-16 text-green-600" />
                 </div>
               </div>
-              <CardTitle className="text-3xl font-bold">Order Delivered!</CardTitle>
-              <p className="text-green-100 text-lg">Your delicious meal from {order.restaurant.name} has arrived!</p>
+              <CardTitle className="text-3xl font-bold">Order Delivered</CardTitle>
+              <p className="text-gray-300 text-lg">Your order from {order.restaurant.name} has arrived</p>
             </CardHeader>
             <CardContent className="p-8">
               <div className="space-y-6">
-                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
-                  <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center">
+                <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                  <h3 className="font-semibold text-lg mb-4 text-gray-900 flex items-center">
                     <Clock className="h-5 w-5 mr-2 text-gray-600" />
                     Order Summary
                   </h3>
@@ -198,7 +294,7 @@ export default function TrackOrderPage() {
                     </div>
                   ))}
                   <Separator className="my-4" />
-                  <div className="flex justify-between font-bold text-xl text-gray-800">
+                  <div className="flex justify-between font-bold text-xl text-gray-900">
                     <span>Total</span>
                     <span className="text-green-600">${order.total.toFixed(2)}</span>
                   </div>
@@ -207,14 +303,14 @@ export default function TrackOrderPage() {
                   <Link href="/customer/dashboard">
                     <Button
                       variant="outline"
-                      className="flex items-center gap-2 border-2 border-gray-300 hover:border-gray-400 bg-transparent"
+                      className="flex items-center gap-2 border-gray-300 hover:border-gray-400 bg-transparent"
                     >
                       <Home className="h-4 w-4" />
                       Back to Dashboard
                     </Button>
                   </Link>
                   <Link href="/customer/profile/orders">
-                    <Button className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600">
+                    <Button className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800">
                       View Order History
                     </Button>
                   </Link>
@@ -228,54 +324,52 @@ export default function TrackOrderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-pink-50">
+    <div className="min-h-screen bg-gray-50">
       <Dialog open={showDriverInfo} onOpenChange={setShowDriverInfo}>
-        <DialogContent className="sm:max-w-md bg-white rounded-2xl border-0 shadow-2xl">
+        <DialogContent className="sm:max-w-md bg-white rounded-lg border border-gray-200 shadow-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-gray-800">
-              <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-2 rounded-full">
+            <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-gray-900">
+              <div className="bg-gray-900 p-2 rounded-full">
                 <Car className="h-5 w-5 text-white" />
               </div>
-              Your Driver is on the way!
+              Your Driver is on the way
             </DialogTitle>
           </DialogHeader>
           {order.driverProfile && (
             <div className="space-y-6">
               <div className="flex items-center space-x-4">
-                <Avatar className="h-20 w-20 border-4 border-blue-200">
+                <Avatar className="h-20 w-20 border-2 border-gray-200">
                   <AvatarImage src={order.driverProfile.user?.image || ""} />
-                  <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-xl">
+                  <AvatarFallback className="bg-gray-900 text-white text-xl">
                     <User className="h-10 w-10" />
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <h3 className="font-bold text-xl text-gray-800">{order.driverProfile.user?.name || "Driver"}</h3>
+                  <h3 className="font-semibold text-xl text-gray-900">{order.driverProfile.user?.name || "Driver"}</h3>
                   <div className="flex items-center gap-2 mt-2">
                     <div className="flex items-center">
                       {[...Array(5)].map((_, i) => (
-                        <Star key={i} className="h-4 w-4 text-yellow-400 fill-current" />
+                        <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
                       ))}
                     </div>
                     <span className="text-sm text-gray-600 font-medium">4.8 rating</span>
                   </div>
                   {order.driverProfile.vehicleType && (
-                    <Badge className="mt-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
-                      {order.driverProfile.vehicleType}
-                    </Badge>
+                    <Badge className="mt-2 bg-gray-900 text-white border-0">{order.driverProfile.vehicleType}</Badge>
                   )}
                 </div>
               </div>
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-2xl border border-blue-200">
+              <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-bold text-blue-900 text-lg">Vehicle Details</p>
-                    <p className="text-blue-800 font-medium">
+                    <p className="font-semibold text-gray-900 text-lg">Vehicle Details</p>
+                    <p className="text-gray-700 font-medium">
                       {order.driverProfile.vehicleMake || "Vehicle"} {order.driverProfile.vehicleModel || ""}
                     </p>
-                    <p className="text-blue-700 font-mono text-sm">{order.driverProfile.vehiclePlate || "N/A"}</p>
+                    <p className="text-gray-600 font-mono text-sm">{order.driverProfile.vehiclePlate || "N/A"}</p>
                   </div>
                   {order.driverProfile.phoneNumber && (
-                    <Button className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white border-0 shadow-lg">
+                    <Button className="bg-green-600 hover:bg-green-700 text-white">
                       <Phone className="h-4 w-4 mr-2" />
                       Call Driver
                     </Button>
@@ -284,7 +378,7 @@ export default function TrackOrderPage() {
               </div>
               <Button
                 onClick={() => setShowDriverInfo(false)}
-                className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white py-3 text-lg font-semibold rounded-xl"
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white py-3 text-lg font-medium rounded-lg"
               >
                 Continue Tracking
               </Button>
@@ -294,7 +388,26 @@ export default function TrackOrderPage() {
       </Dialog>
 
       <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-        {/* Changed grid layout to make map bigger */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Track Your Order</h1>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-600">
+              {isConnected ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  Live updates active
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  Connecting...
+                </span>
+              )}
+            </div>
+            <RefreshButton onRefresh={handleManualRefresh} />
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
           <div className="xl:col-span-3">
             <LiveTracking
@@ -308,60 +421,60 @@ export default function TrackOrderPage() {
             />
           </div>
           <div className="xl:col-span-1 space-y-6">
-            <Card className="bg-white shadow-xl border-0 rounded-2xl overflow-hidden">
-              <CardHeader className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                <CardTitle className="text-xl font-bold">Order Summary</CardTitle>
-                <p className="text-orange-100">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+            <Card className="bg-white shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+              <CardHeader className="bg-gray-900 text-white">
+                <CardTitle className="text-xl font-semibold">Order Summary</CardTitle>
+                <p className="text-gray-300">Order #{order.id.slice(0, 8).toUpperCase()}</p>
               </CardHeader>
               <CardContent className="p-6">
                 <div className="space-y-4">
                   {order.orderItems.map((item) => (
                     <div key={item.id} className="flex justify-between items-center py-2">
                       <span className="flex-1 pr-2 text-gray-700 font-medium">
-                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold mr-2">
+                        <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-semibold mr-2">
                           {item.quantity}×
                         </span>
                         {item.menuItem.name}
                       </span>
-                      <span className="font-bold text-gray-800">${(item.price * item.quantity).toFixed(2)}</span>
+                      <span className="font-semibold text-gray-900">${(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}
                   <Separator className="my-4" />
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between text-gray-600">
                       <p>Subtotal</p>
-                      <p className="font-semibold">${order.subtotal.toFixed(2)}</p>
+                      <p className="font-medium">${order.subtotal.toFixed(2)}</p>
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <p>Delivery Fee</p>
-                      <p className="font-semibold">${order.deliveryFee.toFixed(2)}</p>
+                      <p className="font-medium">${order.deliveryFee.toFixed(2)}</p>
                     </div>
                     <div className="flex justify-between text-gray-600">
                       <p>Service Fee</p>
-                      <p className="font-semibold">${order.serviceFee.toFixed(2)}</p>
+                      <p className="font-medium">${order.serviceFee.toFixed(2)}</p>
                     </div>
                   </div>
                   <Separator className="my-4" />
-                  <div className="flex justify-between font-bold text-xl">
-                    <span className="text-gray-800">Total</span>
+                  <div className="flex justify-between font-semibold text-xl">
+                    <span className="text-gray-900">Total</span>
                     <span className="text-green-600">${order.total.toFixed(2)}</span>
                   </div>
                 </div>
                 <Separator className="my-6" />
                 <div className="space-y-4">
-                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                    <h3 className="font-bold mb-2 text-blue-900 flex items-center">
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold mb-2 text-gray-900 flex items-center">
                       <MapPin className="h-4 w-4 mr-2" />
                       Delivery Address
                     </h3>
-                    <p className="text-blue-800 font-medium">{order.deliveryAddress}</p>
+                    <p className="text-gray-700 font-medium">{order.deliveryAddress}</p>
                   </div>
-                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-200">
-                    <h3 className="font-bold mb-2 text-orange-900 flex items-center">
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold mb-2 text-gray-900 flex items-center">
                       <Home className="h-4 w-4 mr-2" />
                       Restaurant
                     </h3>
-                    <p className="text-orange-800 font-medium">{order.restaurant.name}</p>
+                    <p className="text-gray-700 font-medium">{order.restaurant.name}</p>
                   </div>
                 </div>
               </CardContent>

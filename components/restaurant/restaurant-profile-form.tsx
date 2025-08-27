@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { updateRestaurantProfile } from "@/app/restaurant/profile/actions"
 import { Loader2 } from "lucide-react"
-import { BannerImageUpload } from "@/components/ui/banner-image-upload"
+import { LogoImageUpload } from "@/components/ui/logo-image-upload"
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Restaurant name must be at least 2 characters." }),
@@ -31,7 +31,7 @@ const formSchema = z.object({
   bankAccountNumber: z.string().optional(),
   bankName: z.string().optional(),
   swiftCode: z.string().optional(),
-  bannerImage: z.string().optional(),
+  logoImage: z.string().optional(),
 })
 
 interface RestaurantProfileFormProps {
@@ -48,7 +48,7 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
       name: initialData?.name || "",
       description: initialData?.description || "",
       phone: initialData?.phone || "",
-      address: initialData?.address || "",
+      address: initialData?.streetAddress || initialData?.address || "",
       cuisine: Array.isArray(initialData?.cuisine) ? initialData.cuisine[0] : initialData?.cuisine || "",
       category: initialData?.category || "",
       website: initialData?.website || "",
@@ -59,7 +59,7 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
       bankAccountNumber: initialData?.bankAccountNumber || "",
       bankName: initialData?.bankName || "",
       swiftCode: initialData?.swiftCode || "",
-      bannerImage: initialData?.bannerImage || "",
+      logoImage: initialData?.logoImage || "",
     },
   })
 
@@ -67,24 +67,33 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
     setIsSubmitting(true)
 
     try {
+      console.log("Form values:", values)
+
       const formData = new FormData()
       Object.entries(values).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          formData.append(key, value)
+        if (value !== undefined && value !== null && value !== "") {
+          formData.append(key, value.toString())
         }
       })
 
+      console.log("FormData entries:")
+      for (const [key, value] of formData.entries()) {
+        console.log(`${key}: ${value}`)
+      }
+
       const result = await updateRestaurantProfile(formData)
+      console.log("Update result:", result)
 
       if (result.success) {
         toast.success("Profile updated successfully! Changes will be visible to customers.")
         router.refresh()
       } else {
-        toast.error(result.message || "Failed to update profile. Please try again.")
+        console.error("Update failed:", result.error, result.issues)
+        toast.error(result.error || "Failed to update profile. Please try again.")
       }
     } catch (error) {
-      toast.error("An unexpected error occurred. Please try again.")
       console.error("Profile update error:", error)
+      toast.error("An unexpected error occurred. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
@@ -194,20 +203,27 @@ export function RestaurantProfileForm({ initialData }: RestaurantProfileFormProp
           </CardContent>
         </Card>
 
-        {/* Banner Image */}
+        {/* Restaurant Logo */}
         <Card>
           <CardHeader>
-            <CardTitle>Restaurant Banner</CardTitle>
-            <CardDescription>Upload a banner image for your restaurant page</CardDescription>
+            <CardTitle>Restaurant Logo</CardTitle>
+            <CardDescription>Upload a logo for your restaurant</CardDescription>
           </CardHeader>
           <CardContent>
             <FormField
               control={form.control}
-              name="bannerImage"
+              name="logoImage"
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <BannerImageUpload value={field.value} onChange={field.onChange} disabled={isSubmitting} />
+                    <LogoImageUpload
+                      value={field.value}
+                      onChange={(fileUrl: string) => {
+                        console.log("Logo image changed:", fileUrl)
+                        field.onChange(fileUrl)
+                      }}
+                      disabled={isSubmitting}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
