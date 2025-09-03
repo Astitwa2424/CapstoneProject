@@ -25,21 +25,12 @@ interface RestaurantCardProps {
 }
 
 export function RestaurantCard({ restaurant, featured = false }: RestaurantCardProps) {
-  console.log("[v0] RestaurantCard debug:", {
-    restaurantName: restaurant.name,
-    logoImage: restaurant.logoImage,
-    image: restaurant.image,
-    restaurantId: restaurant.id,
-  })
-
   const cardClass = featured
     ? "group cursor-pointer hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2"
     : "group cursor-pointer hover:shadow-xl transition-all duration-200 hover:-translate-y-1"
 
   const displayImage = restaurant.logoImage || restaurant.image || null
   const placeholderImage = `/placeholder.svg?width=400&height=200&text=${encodeURIComponent(restaurant.name)}`
-
-  console.log("[v0] Display image for", restaurant.name, ":", displayImage)
 
   // Handle cuisine display - convert array to string if needed
   const cuisineDisplay = Array.isArray(restaurant.cuisine)
@@ -58,14 +49,9 @@ export function RestaurantCard({ restaurant, featured = false }: RestaurantCardP
               alt={`${restaurant.name} logo`}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
               onError={(event) => {
-                // Only log if we're trying to load a real image (not already a placeholder)
-                if (displayImage && !event.currentTarget.src.includes("placeholder.svg")) {
-                  console.log(`Failed to load image for ${restaurant.name}:`, displayImage)
-                }
                 event.currentTarget.src = placeholderImage
               }}
               onLoad={(event) => {
-                // Remove any error styling when image loads successfully
                 event.currentTarget.style.filter = "none"
               }}
             />
