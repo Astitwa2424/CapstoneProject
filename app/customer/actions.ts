@@ -50,16 +50,17 @@ export async function addPaymentMethod(prevState: any, formData: FormData) {
     await prisma.paymentMethod.create({
       data: {
         customerProfileId: customerProfile.id,
-        stripePaymentMethodId: `custom_${Date.now()}`, // Custom ID for non-Stripe storage
         type: cardType,
         last4: last4,
         cardHolder: cardHolder,
         expiryMonth: expiryMonth,
         expiryYear: `20${expiryYear}`,
+        isDefault: false, // Added isDefault field from schema
       },
     })
 
     revalidatePath("/customer/checkout")
+    revalidatePath("/customer/profile/payment-methods") // Added revalidation for payment methods page
     return { success: true }
   } catch (error: any) {
     console.error("Database Error:", error)
