@@ -18,10 +18,24 @@ export async function addPaymentMethod(prevState: any, formData: FormData) {
   const session = await auth()
   if (!session?.user?.id) return { error: "Not authenticated" }
 
-  const customerProfile = await prisma.customerProfile.findUnique({
+  let customerProfile = await prisma.customerProfile.findUnique({
     where: { userId: session.user.id },
   })
-  if (!customerProfile) return { error: "Customer profile not found" }
+
+  if (!customerProfile) {
+    console.log(`Creating CustomerProfile for user ${session.user.id}`)
+    try {
+      customerProfile = await prisma.customerProfile.create({
+        data: {
+          userId: session.user.id,
+        },
+      })
+      console.log(`Successfully created CustomerProfile for user ${session.user.id}`)
+    } catch (error) {
+      console.error("Error creating CustomerProfile:", error)
+      return { error: "Failed to create customer profile" }
+    }
+  }
 
   const validatedFields = addPaymentMethodSchema.safeParse({
     cardHolder: formData.get("cardHolder"),

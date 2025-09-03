@@ -148,8 +148,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                   await prisma.customerProfile.create({
                     data: {
                       userId: user.id,
-                      phone: null,
-                      address: null,
                     },
                   })
                   console.log(`Created CustomerProfile for OAuth user ${user.id}`)
