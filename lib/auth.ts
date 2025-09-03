@@ -12,6 +12,7 @@ export type UserRole = PrismaUserRole // Use Prisma enum for consistency
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -21,6 +22,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           prompt: "consent",
           access_type: "offline",
           response_type: "code",
+          redirect_uri:
+            process.env.NODE_ENV === "production"
+              ? "https://capstone-project-mu-wine.vercel.app/api/auth/callback/google"
+              : undefined,
         },
       },
     }),
