@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { headers } from "next/headers"
 import type Stripe from "stripe"
-import { stripe } from "@/lib/stripe"
-import { prisma } from "@/lib/prisma" // Correct import
+import { getStripe } from "@/lib/stripe"
+import { prisma } from "@/lib/prisma"
 import { getSocketIo } from "@/lib/socket"
 
 export async function POST(req: NextRequest) {
@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
   let event: Stripe.Event
 
   try {
+    const stripe = getStripe()
     event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!)
   } catch (error: any) {
     return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 })
