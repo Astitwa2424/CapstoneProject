@@ -2,10 +2,9 @@
 import "server-only"
 
 /**
- * Emits a socket.io event by sending a POST request to our own internal API route.
- * This is the recommended way to trigger socket events from Server Actions
- * or other server-side code in a serverless environment.
- * @param room - The room to emit the event to (e.g., a restaurantId or a user-specific room like `user-userId`).
+ * Emits a Server-Sent Event by sending a POST request to our SSE emit endpoint.
+ * This replaces the Socket.IO implementation with SSE for better Vercel compatibility.
+ * @param room - The room to emit the event to (e.g., user_userId, restaurant_restaurantId).
  * @param event - The name of the event.
  * @param data - The payload to send with the event.
  */
@@ -15,16 +14,13 @@ export async function emitSocketEvent(room: string, event: string, data: unknown
       ? "https://capstone-project-mu-wine.vercel.app"
       : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
 
-  const url = new URL("/api/notify", baseUrl)
+  const url = new URL("/api/sse/emit", baseUrl)
 
   try {
-    // Use fetch to send a request to our own API route.
-    // This decouples the Server Action from the stateful WebSocket server.
     const response = await fetch(url.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Add a secret header to secure the endpoint
         "X-Internal-Secret": process.env.INTERNAL_SECRET_KEY || "super-secret-key-for-dev",
       },
       body: JSON.stringify({ room, event, data }),
@@ -32,12 +28,13 @@ export async function emitSocketEvent(room: string, event: string, data: unknown
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`Failed to emit socket event: ${response.status} ${errorText}`)
+      console.error(`Failed to emit SSE event: ${response.status} ${errorText}`)
     } else {
-      console.log(`✅ Socket event '${event}' emitted to room '${room}'`)
+      const result = await response.json()
+      console.log(`✅ SSE event '${event}' emitted to room '${room}' (${result.connectionCount} connections)`)
     }
   } catch (error) {
-    console.error("Error emitting socket event:", error)
+    console.error("Error emitting SSE event:", error)
   }
 }
 
@@ -48,5 +45,5 @@ export async function emitSocketEvent(room: string, event: string, data: unknown
  * @param data - The payload to send with the event.
  */
 export async function emitToRestaurant(restaurantId: string, event: string, data: unknown) {
-  await emitSocketEvent(restaurantId, event, data)
+  await emitSocketEvent(`restaurant_${restaurantId}`, event, data)
 }
