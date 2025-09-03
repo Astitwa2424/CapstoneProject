@@ -10,8 +10,12 @@ import "server-only"
  * @param data - The payload to send with the event.
  */
 export async function emitSocketEvent(room: string, event: string, data: unknown) {
-  // Construct the absolute URL for the internal API route
-  const url = new URL("/api/notify", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
+  const baseUrl =
+    process.env.NODE_ENV === "production"
+      ? "https://capstone-project-mu-wine.vercel.app"
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+
+  const url = new URL("/api/notify", baseUrl)
 
   try {
     // Use fetch to send a request to our own API route.
@@ -29,6 +33,8 @@ export async function emitSocketEvent(room: string, event: string, data: unknown
     if (!response.ok) {
       const errorText = await response.text()
       console.error(`Failed to emit socket event: ${response.status} ${errorText}`)
+    } else {
+      console.log(`✅ Socket event '${event}' emitted to room '${room}'`)
     }
   } catch (error) {
     console.error("Error emitting socket event:", error)

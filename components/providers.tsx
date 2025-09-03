@@ -35,12 +35,14 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
       path: "/api/socket.io",
       addTrailingSlash: false,
       reconnection: true,
-      reconnectionAttempts: 5, // Reduced from 10 to prevent excessive retries
-      reconnectionDelay: 2000, // Increased initial delay
-      reconnectionDelayMax: 10000, // Increased max delay
-      timeout: 30000, // Increased timeout
-      forceNew: false, // Allow connection reuse
-      transports: ["websocket", "polling"], // Explicit transport fallback
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 60000,
+      forceNew: false,
+      transports: ["websocket", "polling"],
+      upgrade: true,
+      rememberUpgrade: true,
     })
 
     socketInstance.on("connect", () => {
