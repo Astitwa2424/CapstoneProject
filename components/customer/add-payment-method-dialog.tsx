@@ -82,7 +82,7 @@ export default function AddPaymentMethodDialog({ onSuccess, children }: AddPayme
             <CreditCard className="h-5 w-5" />
             Add Payment Method
           </DialogTitle>
-          <DialogDescription>Your card details are securely handled by Stripe.</DialogDescription>
+          <DialogDescription>Your card details are securely stored in our database.</DialogDescription>
         </DialogHeader>
         <form action={formAction}>
           <div className="grid gap-4 py-4">

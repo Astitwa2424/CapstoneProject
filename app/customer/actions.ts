@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
-import { stripe } from "@/lib/stripe"
 import type { CartItem } from "@/hooks/use-cart"
 import { emitToRestaurant } from "@/lib/socket-server"
 
@@ -39,25 +38,21 @@ export async function addPaymentMethod(prevState: any, formData: FormData) {
   const [expiryMonth, expiryYear] = expiryDate.split("/")
 
   try {
-    const stripePaymentMethod = await stripe.paymentMethods.create({
-      type: "card",
-      card: {
-        number: cardNumber.replace(/\s/g, ""),
-        exp_month: Number.parseInt(expiryMonth, 10),
-        exp_year: Number.parseInt(`20${expiryYear}`, 10),
-        cvc: cvv,
-      },
-      billing_details: {
-        name: cardHolder,
-      },
-    })
+    const cleanCardNumber = cardNumber.replace(/\s/g, "")
+    const last4 = cleanCardNumber.slice(-4)
+
+    // Determine card type based on first digit
+    let cardType = "card"
+    if (cleanCardNumber.startsWith("4")) cardType = "visa"
+    else if (cleanCardNumber.startsWith("5")) cardType = "mastercard"
+    else if (cleanCardNumber.startsWith("3")) cardType = "amex"
 
     await prisma.paymentMethod.create({
       data: {
         customerProfileId: customerProfile.id,
-        stripePaymentMethodId: stripePaymentMethod.id,
-        type: stripePaymentMethod.card?.brand || "card",
-        last4: stripePaymentMethod.card?.last4 || "",
+        stripePaymentMethodId: `custom_${Date.now()}`, // Custom ID for non-Stripe storage
+        type: cardType,
+        last4: last4,
         cardHolder: cardHolder,
         expiryMonth: expiryMonth,
         expiryYear: `20${expiryYear}`,
@@ -67,7 +62,7 @@ export async function addPaymentMethod(prevState: any, formData: FormData) {
     revalidatePath("/customer/checkout")
     return { success: true }
   } catch (error: any) {
-    console.error("Stripe/Prisma Error:", error)
+    console.error("Database Error:", error)
     return { error: error.message || "Failed to add payment method." }
   }
 }
