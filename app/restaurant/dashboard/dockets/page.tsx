@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { OrderDockets } from "@/components/restaurant/order-dockets"
-import { prisma } from "@/lib/prisma"
-import { getRestaurantProfile } from "@/lib/auth-utils"
+import { getActiveOrders } from "@/app/restaurant/actions/dockets"
 
 interface OrderItem {
   id: string
@@ -36,46 +35,6 @@ interface Order {
   }
 }
 
-async function getActiveOrders() {
-  "use server"
-
-  try {
-    const restaurantProfile = await getRestaurantProfile()
-    if (!restaurantProfile) {
-      return []
-    }
-
-    const orders = await prisma.order.findMany({
-      where: {
-        restaurantId: restaurantProfile.id,
-        status: {
-          in: ["NEW", "CONFIRMED", "PREPARING", "READY"],
-        },
-      },
-      include: {
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-        customerProfile: {
-          include: {
-            user: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    })
-
-    return orders
-  } catch (error) {
-    console.error("Error fetching active orders:", error)
-    return []
-  }
-}
-
 export default function DocketsPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -84,7 +43,7 @@ export default function DocketsPage() {
     const fetchOrders = async () => {
       try {
         const activeOrders = await getActiveOrders()
-        setOrders(activeOrders as Order[])
+        setOrders(activeOrders)
       } catch (error) {
         console.error("Error loading orders:", error)
       } finally {

@@ -16,18 +16,27 @@ export interface StructuredAddress {
 }
 
 interface AddressAutocompleteInputProps {
-  onAddressSelect: (address: string) => void
+  value?: string
+  onValueChange?: (value: string) => void
+  onAddressSelect: (address: StructuredAddress) => void
 }
 
 const libraries = ["places"]
 
-export default function AddressAutocompleteInput({ onAddressSelect }: AddressAutocompleteInputProps) {
+export default function AddressAutocompleteInput({
+  value: externalValue,
+  onValueChange,
+  onAddressSelect,
+}: AddressAutocompleteInputProps) {
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
     libraries,
   })
 
-  const [value, setValue] = useState("")
+  const [internalValue, setInternalValue] = useState("")
+  const value = externalValue !== undefined ? externalValue : internalValue
+  const setValue = onValueChange || setInternalValue
+
   const autocompleteRef = useRef(null)
 
   const handlePlaceChanged = () => {
@@ -35,7 +44,36 @@ export default function AddressAutocompleteInput({ onAddressSelect }: AddressAut
       const place = autocompleteRef.current.getPlace()
       if (place.formatted_address) {
         setValue(place.formatted_address)
-        onAddressSelect(place.formatted_address)
+
+        const structuredAddress: StructuredAddress = {
+          street: place.name || "",
+          city: "",
+          state: "",
+          zipCode: "",
+          country: "Australia",
+          fullAddress: place.formatted_address,
+        }
+
+        if (place.address_components) {
+          place.address_components.forEach((component: any) => {
+            const types = component.types
+            if (types.includes("locality")) {
+              structuredAddress.city = component.long_name
+            } else if (types.includes("administrative_area_level_1")) {
+              structuredAddress.state = component.short_name
+            } else if (types.includes("postal_code")) {
+              structuredAddress.zipCode = component.long_name
+            } else if (types.includes("street_number") || types.includes("route")) {
+              if (!structuredAddress.street) {
+                structuredAddress.street = component.long_name
+              } else {
+                structuredAddress.street = `${component.long_name} ${structuredAddress.street}`
+              }
+            }
+          })
+        }
+
+        onAddressSelect(structuredAddress)
       }
     }
   }

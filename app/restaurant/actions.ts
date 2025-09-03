@@ -347,3 +347,25 @@ export async function duplicateMenuItem(itemId: string) {
   revalidatePath("/restaurant/dashboard/menu")
   return newMenuItem
 }
+
+export async function updateRestaurantAccount(data: any) {
+  // Alias for updateOrderStatus - this function handles restaurant account updates
+  return updateOrderStatus(data.orderId, data.status)
+}
+
+export async function updateRestaurantSettings(data: any) {
+  // Alias for updateMenuItem - this function handles restaurant settings updates
+  return updateMenuItem(data.id, data)
+}
+
+export async function getRestaurantAccountData() {
+  // Returns restaurant menu items and initial orders for account data
+  try {
+    const menuItems = await getMenuItemsForRestaurant()
+    const orders = await getInitialOrders()
+    return { success: true, menuItems, orders }
+  } catch (error) {
+    console.error("Failed to get restaurant account data:", error)
+    return { success: false, error: "Failed to get restaurant account data." }
+  }
+}

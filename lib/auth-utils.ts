@@ -336,3 +336,24 @@ export async function getCustomerProfileIdFromSession(): Promise<string | null> 
     return null
   }
 }
+
+export async function getRestaurantProfile() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    console.error("No user session found for getting restaurant profile")
+    return null
+  }
+
+  try {
+    const restaurantProfile = await prisma.restaurantProfile.findUnique({
+      where: {
+        userId: session.user.id,
+      },
+    })
+
+    return restaurantProfile
+  } catch (error) {
+    console.error("Failed to fetch restaurant profile:", error)
+    return null
+  }
+}

@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { getDriverProfile } from "../actions"
+import { getDriverProfile } from "../../actions"
 import { LogoutButton } from "@/components/auth/logout-button"
 import {
   Sidebar,
@@ -144,7 +144,7 @@ export default async function DriverDashboardLayout({
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
-                  className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                  className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
                   side="bottom"
                   align="end"
                   sideOffset={4}
