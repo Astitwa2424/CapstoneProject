@@ -35,12 +35,12 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
       path: "/api/socket.io",
       addTrailingSlash: false,
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      maxReconnectionAttempts: 10,
-      timeout: 20000,
-      forceNew: true,
+      reconnectionAttempts: 5, // Reduced from 10 to prevent excessive retries
+      reconnectionDelay: 2000, // Increased initial delay
+      reconnectionDelayMax: 10000, // Increased max delay
+      timeout: 30000, // Increased timeout
+      forceNew: false, // Allow connection reuse
+      transports: ["websocket", "polling"], // Explicit transport fallback
     })
 
     socketInstance.on("connect", () => {
@@ -51,9 +51,6 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
     socketInstance.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason)
       setIsConnected(false)
-      if (reason === "io server disconnect") {
-        socketInstance.connect()
-      }
     })
 
     socketInstance.on("reconnect", (attemptNumber) => {

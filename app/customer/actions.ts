@@ -68,8 +68,31 @@ export async function addPaymentMethod(prevState: any, formData: FormData) {
   }
 }
 
+const cartItemSchema = z.object({
+  id: z.string(),
+  menuItem: z.object({
+    id: z.string(),
+    name: z.string(),
+    price: z.number(),
+    restaurant: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  }),
+  quantity: z.number().min(1),
+  selectedModifications: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      cost: z.number().optional(),
+    }),
+  ),
+  specialInstructions: z.string().optional(),
+  totalPrice: z.number(),
+})
+
 const placeOrderSchema = z.object({
-  cartItems: z.array(z.any()),
+  cartItems: z.array(cartItemSchema), // Using proper cart item validation instead of z.any()
   paymentMethodId: z.string().min(1, "Payment method is required"),
   deliveryAddress: z.string().min(1, "Delivery address is required"),
   restaurantId: z.string(),
@@ -91,7 +114,8 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
 
   const validatedFields = placeOrderSchema.safeParse(data)
   if (!validatedFields.success) {
-    return { success: false, error: "Invalid order data." }
+    console.error("Order validation failed:", validatedFields.error.flatten()) // Added detailed error logging
+    return { success: false, error: "Invalid order data. Please check your cart items." }
   }
 
   const {
@@ -119,14 +143,14 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
         paymentMethodId,
         specialInstructions,
         status: "NEW",
-        paymentStatus: "PAID", // Assume payment is successful
+        paymentStatus: "PAID",
         orderItems: {
           create: cartItems.map((item: CartItem) => ({
             menuItemId: item.menuItem.id,
             quantity: item.quantity,
             price: item.menuItem.price,
             specialInstructions: item.specialInstructions,
-            selectedModifications: item.selectedModifications as any,
+            selectedModifications: JSON.stringify(item.selectedModifications), // Properly serialize modifications
           })),
         },
       },
@@ -136,30 +160,34 @@ export async function placeOrder(data: z.infer<typeof placeOrderSchema>) {
       },
     })
 
-    // **CRITICAL FIX**: Notify the restaurant in real-time about the new order.
-    const serializedOrder = {
-      id: newOrder.id,
-      orderNumber: `#${newOrder.id.substring(0, 6).toUpperCase()}`,
-      customerName: newOrder.customerProfile.user.name ?? "N/A",
-      items: newOrder.orderItems.map((item) => ({
-        name: item.menuItem.name,
-        quantity: item.quantity,
-        price: item.price,
-      })),
-      total: newOrder.total,
-      status: newOrder.status,
-      orderTime: newOrder.createdAt.toISOString(),
-      estimatedTime: 30,
-      deliveryType: newOrder.deliveryAddress ? ("delivery" as const) : ("pickup" as const),
-      deliveryAddress: newOrder.deliveryAddress,
+    try {
+      const serializedOrder = {
+        id: newOrder.id,
+        orderNumber: `#${newOrder.id.substring(0, 6).toUpperCase()}`,
+        customerName: newOrder.customerProfile.user.name ?? "N/A",
+        items: newOrder.orderItems.map((item) => ({
+          name: item.menuItem.name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        total: newOrder.total,
+        status: newOrder.status,
+        orderTime: newOrder.createdAt.toISOString(),
+        estimatedTime: 30,
+        deliveryType: newOrder.deliveryAddress ? ("delivery" as const) : ("pickup" as const),
+        deliveryAddress: newOrder.deliveryAddress,
+      }
+      await emitToRestaurant(restaurantId, "new_order", serializedOrder)
+    } catch (socketError) {
+      console.error("Failed to emit socket event:", socketError)
+      // Don't fail the order if socket emission fails
     }
-    await emitToRestaurant(restaurantId, "new_order", serializedOrder)
 
     revalidatePath("/customer/profile/orders")
     return { success: true, orderId: newOrder.id }
   } catch (error) {
     console.error("Error placing order:", error)
-    return { success: false, error: "Failed to place order." }
+    return { success: false, error: "Failed to place order. Please try again." }
   }
 }
 
