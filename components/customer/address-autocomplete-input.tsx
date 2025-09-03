@@ -28,8 +28,10 @@ export default function AddressAutocompleteInput({
   onValueChange,
   onAddressSelect,
 }: AddressAutocompleteInputProps) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+
   const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
+    googleMapsApiKey: apiKey,
     libraries,
   })
 
@@ -78,14 +80,48 @@ export default function AddressAutocompleteInput({
     }
   }
 
-  if (loadError) {
-    return <div>Error loading maps. Please check your API key.</div>
+  if (!apiKey) {
+    return (
+      <div className="space-y-2">
+        <Label htmlFor="address">Delivery Address</Label>
+        <Input
+          id="address"
+          type="text"
+          placeholder="Enter your delivery address manually"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-full"
+        />
+        <p className="text-sm text-amber-600">Address autocomplete unavailable - Google Maps API key not configured</p>
+      </div>
+    )
   }
+
+  if (loadError) {
+    return (
+      <div className="space-y-2">
+        <Label htmlFor="address">Delivery Address</Label>
+        <Input
+          id="address"
+          type="text"
+          placeholder="Enter your delivery address manually"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-full"
+        />
+        <p className="text-sm text-red-600">Error loading maps. Please check your API key or enter address manually.</p>
+      </div>
+    )
+  }
+
   if (!isLoaded) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading address input...</span>
+      <div className="space-y-2">
+        <Label htmlFor="address">Delivery Address</Label>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading address input...</span>
+        </div>
       </div>
     )
   }
