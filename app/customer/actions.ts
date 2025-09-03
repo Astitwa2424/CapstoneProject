@@ -94,7 +94,21 @@ const cartItemSchema = z.object({
 const placeOrderSchema = z.object({
   cartItems: z.array(cartItemSchema), // Using proper cart item validation instead of z.any()
   paymentMethodId: z.string().min(1, "Payment method is required"),
-  deliveryAddress: z.string().min(1, "Delivery address is required"),
+  deliveryAddress: z.union([
+    z.string().min(1, "Delivery address is required"),
+    z
+      .object({
+        street: z.string(),
+        city: z.string(),
+        state: z.string(),
+        zipCode: z.string(),
+        country: z.string().optional(),
+      })
+      .transform(
+        (addr) =>
+          `${addr.street}, ${addr.city}, ${addr.state} ${addr.zipCode}${addr.country ? `, ${addr.country}` : ""}`,
+      ),
+  ]),
   restaurantId: z.string(),
   subtotal: z.number(),
   deliveryFee: z.number(),
