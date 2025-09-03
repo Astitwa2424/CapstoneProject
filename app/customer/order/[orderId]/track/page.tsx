@@ -12,7 +12,7 @@ import { AlertCircle, Loader2, CheckCircle, Home, Phone, Star, User, Car, MapPin
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { toast } from "sonner"
+import { toast } from "react-toastify"
 import type {
   Order,
   OrderItem,
@@ -391,19 +391,6 @@ export default function TrackOrderPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Track Your Order</h1>
           <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-600">
-              {isConnected ? (
-                <span className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  Live updates active
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  Connecting...
-                </span>
-              )}
-            </div>
             <RefreshButton onRefresh={handleManualRefresh} />
           </div>
         </div>

@@ -12,12 +12,12 @@ import { toast } from "sonner"
 
 const DriverMap = dynamic(() => import("@/components/tracking/driver-map"), {
   ssr: false,
-  loading: () => <div className="w-full h-full bg-gray-800 animate-pulse rounded-lg" />,
+  loading: () => <div className="w-full h-full bg-gray-200 animate-pulse rounded-lg" />,
 })
 
 const DriverDeliveryMap = dynamic(() => import("@/components/tracking/driver-delivery-map"), {
   ssr: false,
-  loading: () => <div className="w-full h-full bg-gray-800 animate-pulse rounded-lg" />,
+  loading: () => <div className="w-full h-full bg-gray-200 animate-pulse rounded-lg" />,
 })
 
 interface DriverProfile {
@@ -310,22 +310,13 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-      {/* Header */}
-      <div className="border-b border-slate-700 bg-slate-800/50 backdrop-blur-sm">
+    <div className="min-h-screen bg-gray-50">
+      <div className="border-b border-gray-200 bg-white shadow-sm">
         <div className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                FoodHub Driver
-              </h1>
-              <p className="text-slate-400 mt-1">Welcome back, {driver.user.name || "Driver"}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-                <span className="text-xs text-slate-400">
-                  {isConnected ? "Connected - Live updates active" : "Reconnecting..."}
-                </span>
-              </div>
+              <h1 className="text-3xl font-bold text-gray-900">FoodHub Driver</h1>
+              <p className="text-gray-600 mt-1">Welcome back, {driver.user.name || "Driver"}</p>
             </div>
             <div className="flex items-center gap-4">
               <Badge variant={driver.isAvailable ? "default" : "secondary"} className="px-3 py-1">
@@ -357,13 +348,13 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
       <div className="p-6 space-y-6">
         {/* Navigation Map for Active Delivery */}
         {showNavigation && activeOrder && driverLocation && (
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-white border-gray-200 shadow-lg">
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Navigation className="h-5 w-5 text-green-400" />
+                <CardTitle className="flex items-center gap-2 text-gray-900">
+                  <Navigation className="h-5 w-5 text-green-600" />
                   Navigation to Delivery
-                  <Badge variant="outline" className="border-green-500 text-green-400 ml-2">
+                  <Badge variant="outline" className="border-green-500 text-green-600 ml-2">
                     ACTIVE DELIVERY
                   </Badge>
                 </CardTitle>
@@ -378,7 +369,7 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
                         activeOrder.deliveryLng || undefined,
                       )
                     }
-                    className="border-blue-400 text-blue-400 hover:bg-blue-400/20"
+                    className="border-blue-500 text-blue-600 hover:bg-blue-50"
                   >
                     <ExternalLink className="h-4 w-4 mr-1" />
                     Open in Google Maps
@@ -387,13 +378,13 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
                     size="sm"
                     onClick={handleCompleteDelivery}
                     disabled={isLoading}
-                    className="bg-green-600 hover:bg-green-700"
+                    className="bg-green-600 hover:bg-green-700 text-white"
                   >
                     Complete Delivery
                   </Button>
                 </div>
               </div>
-              <div className="text-sm text-slate-400">
+              <div className="text-sm text-gray-600">
                 <p>
                   <strong>Restaurant:</strong> {activeOrder.restaurant.name}
                 </p>
@@ -423,13 +414,13 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
 
         {/* Australian GPS Map - Overview */}
         {!showNavigation && (
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-white border-gray-200 shadow-lg">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2">
-                <Navigation className="h-5 w-5 text-blue-400" />
+              <CardTitle className="flex items-center gap-2 text-gray-900">
+                <Navigation className="h-5 w-5 text-blue-600" />
                 Australian Delivery Map
                 {isLocationEnabled && (
-                  <Badge variant="outline" className="ml-auto border-green-500 text-green-400">
+                  <Badge variant="outline" className="ml-auto border-green-500 text-green-600">
                     GPS Active
                   </Badge>
                 )}
@@ -439,13 +430,19 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
               <div className="h-[400px] rounded-lg overflow-hidden">
                 <DriverMap
                   driverLocation={driverLocation}
-                  availableOrders={availableOrders}
-                  activeOrder={activeOrder}
+                  restaurantLocation={{
+                    lat: activeOrder?.restaurant.mapLatitude || -33.8688,
+                    lng: activeOrder?.restaurant.mapLongitude || 151.2093,
+                  }}
+                  customerLocation={{
+                    lat: activeOrder?.deliveryLat || -33.8688,
+                    lng: activeOrder?.deliveryLng || 151.2093,
+                  }}
                 />
               </div>
               {!isLocationEnabled && driver.isAvailable && (
-                <div className="mt-4 p-3 bg-yellow-600/20 border border-yellow-600/30 rounded-lg">
-                  <p className="text-yellow-200 text-sm">
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-yellow-800 text-sm">
                     🌏 Please enable location services to see your position on the Australian delivery map
                   </p>
                 </div>
@@ -456,13 +453,13 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Available Orders */}
-          <Card className="bg-slate-800/50 border-slate-700">
+          <Card className="bg-white border-gray-200 shadow-lg">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-green-400" />
+              <CardTitle className="flex items-center gap-2 text-gray-900">
+                <Clock className="h-5 w-5 text-green-600" />
                 Available Orders
                 {driver.isAvailable && isConnected && (
-                  <Badge variant="outline" className="ml-auto border-green-500 text-green-400 text-xs">
+                  <Badge variant="outline" className="ml-auto border-green-500 text-green-600 text-xs">
                     LIVE
                   </Badge>
                 )}
@@ -470,43 +467,42 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
             </CardHeader>
             <CardContent>
               {!driver.isAvailable ? (
-                <div className="text-center py-8 text-slate-400">
+                <div className="text-center py-8 text-gray-500">
                   <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Go online to see available orders</p>
                 </div>
               ) : availableOrders.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
+                <div className="text-center py-8 text-gray-500">
                   <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No orders available</p>
                   <p className="text-sm mt-2">New orders will appear here automatically</p>
-                  {!isConnected && <p className="text-xs mt-2 text-red-400">Reconnecting to live updates...</p>}
                 </div>
               ) : (
                 <div className="space-y-4">
                   {availableOrders.slice(0, 3).map((order) => (
                     <div
                       key={order.id}
-                      className="p-4 border border-slate-600 rounded-lg hover:border-blue-500/50 transition-colors"
+                      className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors bg-gray-50"
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h4 className="font-semibold text-white">{order.restaurant.name}</h4>
-                          <p className="text-slate-400 text-sm flex items-center gap-1">
+                          <h4 className="font-semibold text-gray-900">{order.restaurant.name}</h4>
+                          <p className="text-gray-600 text-sm flex items-center gap-1">
                             <MapPin className="h-4 w-4" />
                             {order.restaurant.address}
                           </p>
                         </div>
-                        <Badge variant="outline" className="border-green-500 text-green-400">
+                        <Badge variant="outline" className="border-green-500 text-green-600">
                           ${order.total.toFixed(2)}
                         </Badge>
                       </div>
                       <div className="flex items-center justify-between">
-                        <p className="text-slate-300 text-sm">Deliver to: {order.deliveryAddress}</p>
+                        <p className="text-gray-700 text-sm">Deliver to: {order.deliveryAddress}</p>
                         <Button
                           size="sm"
                           onClick={() => handleAcceptOrder(order.id)}
                           disabled={isLoading}
-                          className="bg-green-600 hover:bg-green-700"
+                          className="bg-green-600 hover:bg-green-700 text-white"
                         >
                           Accept
                         </Button>
@@ -522,18 +518,18 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
           <div className="space-y-6">
             {/* Active Delivery */}
             {activeOrder && (
-              <Card className="bg-green-600/20 border-green-500/30">
+              <Card className="bg-green-50 border-green-200 shadow-lg">
                 <CardHeader>
-                  <CardTitle className="text-green-400">Active Delivery</CardTitle>
+                  <CardTitle className="text-green-700">Active Delivery</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <h4 className="font-semibold text-white">{activeOrder.restaurant.name}</h4>
-                      <p className="text-green-200 text-sm">Deliver to: {activeOrder.deliveryAddress}</p>
+                      <h4 className="font-semibold text-gray-900">{activeOrder.restaurant.name}</h4>
+                      <p className="text-green-700 text-sm">Deliver to: {activeOrder.deliveryAddress}</p>
                     </div>
                     <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="border-green-400 text-green-400">
+                      <Badge variant="outline" className="border-green-500 text-green-600">
                         ${activeOrder.total.toFixed(2)}
                       </Badge>
                       <div className="flex gap-2">
@@ -541,25 +537,10 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
                           size="sm"
                           variant="outline"
                           onClick={toggleNavigationView}
-                          className="border-blue-400 text-blue-400 hover:bg-blue-400/20 bg-transparent"
+                          className="border-blue-500 text-blue-600 hover:bg-blue-50 bg-transparent"
                         >
                           <Navigation className="h-4 w-4 mr-1" />
                           {showNavigation ? "Hide Nav" : "Navigate"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            openGoogleMapsNavigation(
-                              activeOrder.deliveryAddress,
-                              activeOrder.deliveryLat || undefined,
-                              activeOrder.deliveryLng || undefined,
-                            )
-                          }
-                          className="border-blue-400 text-blue-400 hover:bg-blue-400/20"
-                        >
-                          <ExternalLink className="h-4 w-4 mr-1" />
-                          External
                         </Button>
                       </div>
                     </div>
@@ -571,51 +552,51 @@ export function DriverDashboardContent({ initialDriver, initialStats, initialOrd
             {/* Performance Stats */}
             {stats && (
               <div className="grid grid-cols-2 gap-4">
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-white border-gray-200 shadow-lg">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-green-400" />
+                    <CardTitle className="text-sm flex items-center gap-2 text-gray-900">
+                      <DollarSign className="h-4 w-4 text-green-600" />
                       Today's Earnings
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <p className="text-2xl font-bold text-green-400">${stats.todaysEarnings}</p>
+                    <p className="text-2xl font-bold text-green-600">${stats.todaysEarnings}</p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-white border-gray-200 shadow-lg">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-blue-400" />
+                    <CardTitle className="text-sm flex items-center gap-2 text-gray-900">
+                      <MapPin className="h-4 w-4 text-blue-600" />
                       Completed
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <p className="text-2xl font-bold text-blue-400">{stats.completedDeliveries}</p>
+                    <p className="text-2xl font-bold text-blue-600">{stats.completedDeliveries}</p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-white border-gray-200 shadow-lg">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Star className="h-4 w-4 text-yellow-400" />
+                    <CardTitle className="text-sm flex items-center gap-2 text-gray-900">
+                      <Star className="h-4 w-4 text-yellow-600" />
                       Rating
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <p className="text-2xl font-bold text-yellow-400">{stats.averageRating}</p>
+                    <p className="text-2xl font-bold text-yellow-600">{stats.averageRating}</p>
                   </CardContent>
                 </Card>
 
-                <Card className="bg-slate-800/50 border-slate-700">
+                <Card className="bg-white border-gray-200 shadow-lg">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-purple-400" />
+                    <CardTitle className="text-sm flex items-center gap-2 text-gray-900">
+                      <Clock className="h-4 w-4 text-purple-600" />
                       Active Hours
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <p className="text-2xl font-bold text-purple-400">{stats.activeHours}</p>
+                    <p className="text-2xl font-bold text-purple-600">{stats.activeHours}</p>
                   </CardContent>
                 </Card>
               </div>

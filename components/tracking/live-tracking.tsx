@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Clock, Truck, CheckCircle, Package, Navigation, User, Car } from "lucide-react"
-import { useSocket } from "@/components/providers"
-import type { OrderStatus } from "@prisma/client"
 import dynamic from "next/dynamic"
+import type { OrderStatus } from "@prisma/client" // Import OrderStatus
+import { useSocket } from "@/components/providers" // Import useSocket
 
 // Dynamically import the map component to avoid SSR issues
 const DeliveryMap = dynamic(() => import("./delivery-map"), {
@@ -90,7 +90,7 @@ const statusConfig = {
 
 export function LiveTracking({ orderStatus, driverLocation, restaurantLocation, customerAddress }: LiveTrackingProps) {
   const [currentTime, setCurrentTime] = useState(new Date())
-  const { socket, isConnected } = useSocket()
+  const { socket } = useSocket()
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -176,14 +176,6 @@ export function LiveTracking({ orderStatus, driverLocation, restaurantLocation, 
                 )}
               </div>
             ))}
-          </div>
-
-          {/* Connection Status */}
-          <div className="flex items-center justify-center space-x-2 mb-4">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-            <span className="text-sm font-medium text-gray-600">
-              {isConnected ? "Live tracking active" : "Reconnecting..."}
-            </span>
           </div>
         </CardContent>
       </Card>

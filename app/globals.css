@@ -44,76 +44,76 @@
 }
 
 :root {
-  /* Updated design tokens to match modern food delivery app aesthetic */
-  --radius: 0.75rem;
+  /* Updated design tokens to match modern food delivery app aesthetic with warm peach/salmon colors */
+  --radius: 1rem;
   --background: #ffffff;
-  --foreground: #1f2937;
-  --card: #f9fafb;
-  --card-foreground: #374151;
+  --foreground: #4b5563;
+  --card: #fef2f2;
+  --card-foreground: #4b5563;
   --popover: #ffffff;
-  --popover-foreground: #1f2937;
-  --primary: #0891b2;
-  --primary-foreground: #ffffff;
-  --secondary: #3b82f6;
-  --secondary-foreground: #ffffff;
-  --muted: #f3f4f6;
+  --popover-foreground: #4b5563;
+  --primary: #fca5a1;
+  --primary-foreground: #4b5563;
+  --secondary: #fef2f2;
+  --secondary-foreground: #4b5563;
+  --muted: #fef2f2;
   --muted-foreground: #6b7280;
-  --accent: #3b82f6;
+  --accent: #dc2626;
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e5e7eb;
-  --input: #f9fafb;
-  --ring: #3b82f6;
-  --chart-1: #0891b2;
-  --chart-2: #3b82f6;
+  --input: #fef2f2;
+  --ring: rgba(220, 38, 38, 0.5);
+  --chart-1: #fca5a1;
+  --chart-2: #f59e0b;
   --chart-3: #dc2626;
-  --chart-4: #f97316;
+  --chart-4: #fca5a1;
   --chart-5: #f59e0b;
   --sidebar: #ffffff;
-  --sidebar-foreground: #374151;
-  --sidebar-primary: #f9fafb;
-  --sidebar-primary-foreground: #374151;
-  --sidebar-accent: #3b82f6;
+  --sidebar-foreground: #4b5563;
+  --sidebar-primary: #fca5a1;
+  --sidebar-primary-foreground: #4b5563;
+  --sidebar-accent: #dc2626;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #e5e7eb;
-  --sidebar-ring: #3b82f6;
+  --sidebar-ring: rgba(220, 38, 38, 0.5);
 }
 
 .dark {
-  /* Updated dark mode tokens to maintain consistency */
-  --background: #0f172a;
-  --foreground: #f1f5f9;
-  --card: #1e293b;
-  --card-foreground: #e2e8f0;
-  --popover: #1e293b;
-  --popover-foreground: #f1f5f9;
-  --primary: #0ea5e9;
-  --primary-foreground: #0f172a;
-  --secondary: #3b82f6;
-  --secondary-foreground: #f1f5f9;
-  --muted: #334155;
-  --muted-foreground: #94a3b8;
-  --accent: #3b82f6;
-  --accent-foreground: #f1f5f9;
+  /* Updated dark mode tokens to maintain warm aesthetic while ensuring readability */
+  --background: #1f2937;
+  --foreground: #f9fafb;
+  --card: #374151;
+  --card-foreground: #f3f4f6;
+  --popover: #374151;
+  --popover-foreground: #f9fafb;
+  --primary: #fca5a1;
+  --primary-foreground: #1f2937;
+  --secondary: #4b5563;
+  --secondary-foreground: #f9fafb;
+  --muted: #4b5563;
+  --muted-foreground: #9ca3af;
+  --accent: #ef4444;
+  --accent-foreground: #f9fafb;
   --destructive: #ef4444;
-  --destructive-foreground: #f1f5f9;
-  --border: #334155;
-  --input: #1e293b;
-  --ring: #3b82f6;
-  --chart-1: #0ea5e9;
-  --chart-2: #3b82f6;
+  --destructive-foreground: #f9fafb;
+  --border: #4b5563;
+  --input: #374151;
+  --ring: rgba(239, 68, 68, 0.5);
+  --chart-1: #fca5a1;
+  --chart-2: #f59e0b;
   --chart-3: #ef4444;
-  --chart-4: #f97316;
+  --chart-4: #fca5a1;
   --chart-5: #f59e0b;
-  --sidebar: #1e293b;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #334155;
-  --sidebar-primary-foreground: #e2e8f0;
-  --sidebar-accent: #3b82f6;
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: #334155;
-  --sidebar-ring: #3b82f6;
+  --sidebar: #374151;
+  --sidebar-foreground: #f3f4f6;
+  --sidebar-primary: #4b5563;
+  --sidebar-primary-foreground: #f3f4f6;
+  --sidebar-accent: #ef4444;
+  --sidebar-accent-foreground: #f9fafb;
+  --sidebar-border: #4b5563;
+  --sidebar-ring: rgba(239, 68, 68, 0.5);
 }
 
 @layer base {
@@ -123,7 +123,7 @@
   body {
     @apply bg-background text-foreground font-sans;
   }
-  /* Added smooth scrolling and improved typography */
+  /* Added smooth scrolling and improved typography for better user experience */
   html {
     scroll-behavior: smooth;
   }
@@ -137,5 +137,20 @@
   }
   p {
     @apply text-pretty;
+  }
+}
+
+/* Added custom styles for food delivery app aesthetic */
+@layer components {
+  .food-card {
+    @apply bg-card rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1;
+  }
+
+  .hero-gradient {
+    background: linear-gradient(135deg, #fef2f2 0%, #ffffff 50%, #fef2f2 100%);
+  }
+
+  .warm-gradient {
+    background: linear-gradient(135deg, #fca5a1 0%, #dc2626 100%);
   }
 }
