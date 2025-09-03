@@ -12,7 +12,7 @@ import { AlertCircle, Loader2, CheckCircle, Home, Phone, Star, User, Car, MapPin
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { toast } from "react-toastify"
+import { toast } from "sonner"
 import type {
   Order,
   OrderItem,
