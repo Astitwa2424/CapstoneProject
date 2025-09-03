@@ -100,7 +100,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
             if (
               currentDbRole !== intendedRoleValue &&
-              (intendedRoleValue === "DRIVER" || intendedRoleValue === "RESTAURANT")
+              (intendedRoleValue === "DRIVER" || intendedRoleValue === "RESTAURANT" || intendedRoleValue === "CUSTOMER")
             ) {
               console.log(`Attempting to update role for user ${user.id} from ${currentDbRole} to ${intendedRoleValue}`)
               try {
@@ -141,6 +141,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     },
                   })
                   console.log(`Created RestaurantProfile for ${user.id}`)
+                } else if (
+                  currentDbRole === "CUSTOMER" &&
+                  !(await prisma.customerProfile.findUnique({ where: { userId: user.id } }))
+                ) {
+                  await prisma.customerProfile.create({
+                    data: {
+                      userId: user.id,
+                      phone: null,
+                      address: null,
+                    },
+                  })
+                  console.log(`Created CustomerProfile for OAuth user ${user.id}`)
                 }
               } catch (e) {
                 console.error("Error updating user role or creating profile:", e)
