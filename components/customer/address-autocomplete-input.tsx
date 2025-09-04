@@ -4,7 +4,7 @@ import { useRef, useState } from "react"
 import { useLoadScript, Autocomplete } from "@react-google-maps/api"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
+import { Loader2, MapPin } from "lucide-react"
 
 export interface StructuredAddress {
   street: string
@@ -80,19 +80,41 @@ export default function AddressAutocompleteInput({
     }
   }
 
+  const handleManualAddressChange = (address: string) => {
+    setValue(address)
+    // Create a basic structured address for manual input
+    const structuredAddress: StructuredAddress = {
+      street: address,
+      city: "",
+      state: "",
+      zipCode: "",
+      country: "Australia",
+      fullAddress: address,
+    }
+    onAddressSelect(structuredAddress)
+  }
+
   if (!apiKey) {
     return (
       <div className="space-y-2">
-        <Label htmlFor="address">Delivery Address</Label>
+        <Label htmlFor="address" className="flex items-center gap-2">
+          <MapPin className="h-4 w-4" />
+          Delivery Address
+        </Label>
         <Input
           id="address"
           type="text"
-          placeholder="Enter your delivery address manually"
+          placeholder="Enter your full delivery address (e.g., 123 Main St, Sydney NSW 2000)"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => handleManualAddressChange(e.target.value)}
           className="w-full"
         />
-        <p className="text-sm text-amber-600">Address autocomplete unavailable - Google Maps API key not configured</p>
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
+          <p className="text-sm text-amber-700">
+            <strong>Manual Address Entry:</strong> Please enter your complete address including street, suburb, state,
+            and postcode for accurate delivery.
+          </p>
+        </div>
       </div>
     )
   }
@@ -100,16 +122,19 @@ export default function AddressAutocompleteInput({
   if (loadError) {
     return (
       <div className="space-y-2">
-        <Label htmlFor="address">Delivery Address</Label>
+        <Label htmlFor="address" className="flex items-center gap-2">
+          <MapPin className="h-4 w-4" />
+          Delivery Address
+        </Label>
         <Input
           id="address"
           type="text"
-          placeholder="Enter your delivery address manually"
+          placeholder="Enter your full delivery address manually"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => handleManualAddressChange(e.target.value)}
           className="w-full"
         />
-        <p className="text-sm text-red-600">Error loading maps. Please check your API key or enter address manually.</p>
+        <p className="text-sm text-red-600">Maps service unavailable. Please enter your complete address manually.</p>
       </div>
     )
   }
@@ -132,11 +157,14 @@ export default function AddressAutocompleteInput({
       onPlaceChanged={handlePlaceChanged}
       options={{
         types: ["address"],
-        componentRestrictions: { country: "au" }, // Changed to Australia
+        componentRestrictions: { country: "au" },
       }}
     >
       <div className="space-y-2">
-        <Label htmlFor="address">Delivery Address</Label>
+        <Label htmlFor="address" className="flex items-center gap-2">
+          <MapPin className="h-4 w-4" />
+          Delivery Address
+        </Label>
         <Input
           id="address"
           type="text"
@@ -145,6 +173,7 @@ export default function AddressAutocompleteInput({
           onChange={(e) => setValue(e.target.value)}
           className="w-full"
         />
+        <p className="text-xs text-green-600">✓ Address autocomplete enabled</p>
       </div>
     </Autocomplete>
   )
